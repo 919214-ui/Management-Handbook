@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#c2410c" />
+    <title>新火教育制度手册</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app employee-app">
+      <header class="mobile-hero">
+        <div class="brand-row">
+          <div class="brand-mark">新</div>
+          <div>
+            <h1>新火教育制度手册</h1>
+            <p>员工规章制度查询</p>
+          </div>
+        </div>
+      </header>
+
+      <section class="notice-card" id="noticeCard" hidden>
+        <div class="section-heading compact-heading">
+          <h2>通知公告</h2>
+          <p id="noticeCount">0 条</p>
+        </div>
+        <div class="notice-list" id="noticeList"></div>
+      </section>
+
+      <section class="search-card">
+        <label class="search-box" for="employeeSearch">
+          <span aria-hidden="true">⌕</span>
+          <input id="employeeSearch" type="search" placeholder="搜索制度名称、关键词或正文内容" />
+        </label>
+        <div class="quick-tags" id="quickTags"></div>
+      </section>
+
+      <div class="category-strip" id="employeeCategories"></div>
+
+      <section class="employee-layout">
+        <div class="policy-list-card">
+          <div class="section-heading">
+            <h2>制度列表</h2>
+            <p id="employeeCount">0 条</p>
+          </div>
+          <div class="policy-list" id="employeePolicyList"></div>
+        </div>
+
+        <article class="policy-detail" id="employeePolicyDetail"></article>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#c2410c" />
+    <title>新火教育制度手册后台管理</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app admin-app">
+      <section class="login-panel" id="loginPanel">
+        <div class="brand-row">
+          <div class="brand-mark">新</div>
+          <div>
+            <h1>后台管理登录</h1>
+            <p>新火教育制度手册</p>
+          </div>
+        </div>
+
+        <form class="login-form" id="loginForm">
+          <label>
+            账号
+            <input id="loginAccount" autocomplete="username" placeholder="请输入管理员账号" required />
+          </label>
+          <label>
+            密码
+            <input id="loginPassword" type="password" autocomplete="current-password" placeholder="请输入密码" required />
+          </label>
+          <button class="primary-button" type="submit">登录后台</button>
+          <p class="login-tip">演示账号：admin　密码：123456</p>
+        </form>
+      </section>
+
+      <section class="admin-workspace" id="adminWorkspace" hidden>
+        <header class="mobile-hero">
+          <div class="brand-row">
+            <div class="brand-mark">新</div>
+            <div>
+              <h1>制度后台管理</h1>
+              <p>新增、导入、删除和维护制度资料</p>
+            </div>
+          </div>
+          <button class="secondary-button" id="logoutButton" type="button">退出登录</button>
+        </header>
+
+        <div class="admin-grid">
+          <section class="admin-panel">
+            <div class="section-heading">
+              <h2>通知公告</h2>
+              <p id="noticeAdminCount">0 条</p>
+            </div>
+            <form class="policy-form" id="noticeForm">
+              <input type="hidden" id="noticeId" />
+              <label>
+                公告标题
+                <input id="noticeTitle" required placeholder="例如：端午节放假安排" />
+              </label>
+              <label>
+                公告内容
+                <textarea id="noticeContent" required rows="4" placeholder="填写公告正文"></textarea>
+              </label>
+              <div class="form-row">
+                <label>
+                  指定开始时间
+                  <input id="noticeStart" type="date" />
+                </label>
+                <label>
+                  指定结束时间
+                  <input id="noticeEnd" type="date" />
+                </label>
+              </div>
+              <label class="checkbox-label">
+                <input id="noticePinned" type="checkbox" />
+                置顶显示
+              </label>
+              <div class="form-actions">
+                <button class="primary-button" type="submit">保存公告</button>
+                <button class="secondary-button" id="resetNoticeButton" type="button">清空公告</button>
+              </div>
+            </form>
+            <div class="admin-list notice-admin-list" id="noticeAdminList"></div>
+          </section>
+
+          <section class="admin-panel">
+            <div class="section-heading">
+              <h2>新增 / 编辑制度</h2>
+              <p id="formHint">填写后保存到制度库</p>
+            </div>
+
+            <form class="policy-form" id="policyForm">
+              <input type="hidden" id="policyId" />
+              <label>
+                制度名称
+                <input id="policyTitle" required placeholder="例如：员工考勤管理制度" />
+              </label>
+              <div class="form-row">
+                <label>
+                  分类
+                  <input id="policyCategory" required placeholder="例如：人事制度" />
+                </label>
+                <label>
+                  责任部门
+                  <input id="policyOwner" required placeholder="例如：人力行政部" />
+                </label>
+              </div>
+              <div class="form-row">
+                <label>
+                  生效状态
+                  <select id="policyStatus">
+                    <option>现行有效</option>
+                    <option>重点执行</option>
+                    <option>试行</option>
+                    <option>已停用</option>
+                  </select>
+                </label>
+                <label>
+                  更新时间
+                  <input id="policyUpdated" type="date" required />
+                </label>
+              </div>
+              <div class="form-row">
+                <label>
+                  执行开始时间
+                  <input id="policyExecuteStart" type="date" />
+                </label>
+                <label>
+                  执行结束时间
+                  <input id="policyExecuteEnd" type="date" />
+                </label>
+              </div>
+              <label>
+                关键词
+                <input id="policyKeywords" placeholder="多个关键词用顿号、逗号或空格分隔" />
+              </label>
+              <label>
+                制度摘要
+                <textarea id="policySummary" required rows="3" placeholder="简要说明这条制度解决什么问题"></textarea>
+              </label>
+              <label>
+                制度正文
+                <textarea id="policyContent" required rows="8" placeholder="可直接粘贴完整制度内容，每段一行更便于阅读"></textarea>
+              </label>
+              <label>
+                图片展示
+                <input id="policyImage" type="file" accept="image/*" />
+              </label>
+              <label>
+                正式文件
+                <input id="policyDocument" type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,application/pdf,image/*" />
+              </label>
+              <div class="media-preview" id="mediaPreview"></div>
+
+              <div class="form-actions">
+                <button class="primary-button" type="submit">保存制度</button>
+                <button class="secondary-button" id="resetFormButton" type="button">清空表单</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="admin-panel wide-panel">
+            <div class="section-heading">
+              <h2>制度库管理</h2>
+              <p id="adminCount">0 条</p>
+            </div>
+
+            <div class="import-box">
+              <h3>批量导入</h3>
+              <p>支持 JSON 文件导入，也可以把制度数组粘贴到下方文本框。图片和正式文件建议在导入后逐条上传。</p>
+              <input id="importFile" type="file" accept=".json,application/json" />
+              <textarea id="importText" rows="5" placeholder='示例：[{"title":"制度名称","category":"分类","owner":"部门","executeStart":"2026-06-01","executeEnd":"2026-08-01","summary":"摘要","content":"正文"}]'></textarea>
+              <div class="form-actions">
+                <button class="secondary-button" id="importButton" type="button">导入制度</button>
+                <button class="secondary-button" id="exportButton" type="button">导出备份</button>
+              </div>
+            </div>
+
+            <div class="admin-list" id="adminPolicyList"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="admin.js"></script>
+  </body>
+</html>
