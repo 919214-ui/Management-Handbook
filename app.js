@@ -1,11 +1,11 @@
 const POLICY_STORAGE_KEY = "xinhua-education-policy-manual";
-const NOTICE_STORAGE_KEY = "xinhua-education-notices";
-const ALL_CATEGORY = "全部制度";
+const ALL_DEPARTMENT = "全部部门";
 
 const defaultPolicies = [
   {
     id: "attendance",
     title: "员工考勤管理制度",
+    department: "人力行政部",
     category: "人事制度",
     owner: "人力行政部",
     status: "现行有效",
@@ -24,32 +24,15 @@ const defaultPolicies = [
   }
 ];
 
-const defaultNotices = [
-  {
-    id: "notice-welcome",
-    title: "制度手册上线通知",
-    content: "新火教育制度手册已上线，员工可通过搜索快速查询各项规章制度。",
-    start: "",
-    end: "",
-    pinned: true,
-    createdAt: "2026-06-15"
-  }
-];
-
 const state = {
   policies: loadPolicies(),
-  notices: loadNotices(),
-  activeCategory: ALL_CATEGORY,
+  activeDepartment: ALL_DEPARTMENT,
   activePolicyId: null
 };
 
 const els = {
-  noticeCard: document.querySelector("#noticeCard"),
-  noticeList: document.querySelector("#noticeList"),
-  noticeCount: document.querySelector("#noticeCount"),
   search: document.querySelector("#employeeSearch"),
-  quickTags: document.querySelector("#quickTags"),
-  employeeCategories: document.querySelector("#employeeCategories"),
+  employeeDepartments: document.querySelector("#employeeDepartments"),
   employeeCount: document.querySelector("#employeeCount"),
   employeePolicyList: document.querySelector("#employeePolicyList"),
   employeePolicyDetail: document.querySelector("#employeePolicyDetail")
@@ -65,22 +48,13 @@ function loadPolicies() {
   }
 }
 
-function loadNotices() {
-  try {
-    const saved = localStorage.getItem(NOTICE_STORAGE_KEY);
-    const list = saved ? JSON.parse(saved) : defaultNotices;
-    return list.map(normalizeNotice);
-  } catch {
-    return defaultNotices.map(normalizeNotice);
-  }
-}
-
 function normalizePolicy(policy) {
   return {
     id: policy.id || `policy-${Date.now()}`,
     title: String(policy.title || "未命名制度").trim(),
+    department: String(policy.department || policy.owner || "未设置部门").trim(),
     category: String(policy.category || "未分类").trim(),
-    owner: String(policy.owner || "未设置").trim(),
+    owner: String(policy.owner || policy.department || "未设置").trim(),
     status: String(policy.status || "现行有效").trim(),
     updated: String(policy.updated || "").trim(),
     executeStart: String(policy.executeStart || "").trim(),
@@ -93,18 +67,6 @@ function normalizePolicy(policy) {
     documentData: policy.documentData || "",
     documentName: policy.documentName || "",
     documentType: policy.documentType || ""
-  };
-}
-
-function normalizeNotice(notice) {
-  return {
-    id: notice.id || `notice-${Date.now()}`,
-    title: String(notice.title || "未命名公告").trim(),
-    content: String(notice.content || "").trim(),
-    start: String(notice.start || "").trim(),
-    end: String(notice.end || "").trim(),
-    pinned: Boolean(notice.pinned),
-    createdAt: String(notice.createdAt || today()).trim()
   };
 }
 
@@ -132,8 +94,8 @@ function highlight(value, query) {
   return safe.replace(new RegExp(`(${escapeRegExp(trimmed)})`, "gi"), "<mark>$1</mark>");
 }
 
-function getCategories() {
-  return [ALL_CATEGORY, ...new Set(state.policies.filter(isEmployeeVisible).map((policy) => policy.category))];
+function getDepartments() {
+  return [ALL_DEPARTMENT, ...new Set(state.policies.filter(isEmployeeVisible).map((policy) => policy.department))];
 }
 
 function getFilteredPolicies() {
@@ -141,9 +103,10 @@ function getFilteredPolicies() {
 
   return state.policies.filter((policy) => {
     if (!isEmployeeVisible(policy)) return false;
-    const categoryMatch = state.activeCategory === ALL_CATEGORY || policy.category === state.activeCategory;
+    const departmentMatch = state.activeDepartment === ALL_DEPARTMENT || policy.department === state.activeDepartment;
     const text = [
       policy.title,
+      policy.department,
       policy.category,
       policy.owner,
       policy.status,
@@ -156,7 +119,7 @@ function getFilteredPolicies() {
     ]
       .join(" ")
       .toLowerCase();
-    return categoryMatch && (!query || text.includes(query));
+    return departmentMatch && (!query || text.includes(query));
   });
 }
 
@@ -166,52 +129,15 @@ function isEmployeeVisible(policy) {
   return policy.executeEnd >= today();
 }
 
-function isNoticeVisible(notice) {
-  const current = today();
-  if (notice.start && notice.start > current) return false;
-  if (notice.end && notice.end < current) return false;
-  return true;
-}
-
-function renderNotices() {
-  const visible = state.notices
-    .filter(isNoticeVisible)
-    .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.createdAt.localeCompare(a.createdAt));
-
-  els.noticeCard.hidden = visible.length === 0;
-  els.noticeCount.textContent = `${visible.length} 条`;
-  els.noticeList.innerHTML = visible
-    .map((notice) => `
-      <article class="notice-item">
-        <div class="notice-title-row">
-          <h3>${escapeHtml(notice.title)}</h3>
-          ${notice.pinned ? `<span class="pill status-pill">置顶</span>` : ""}
-        </div>
-        <p>${escapeHtml(notice.content)}</p>
-        <div class="policy-meta">
-          <span>${escapeHtml(getNoticeTimeText(notice))}</span>
-        </div>
-      </article>
-    `)
-    .join("");
-}
-
-function renderQuickTags() {
-  const tags = [...new Set(state.policies.filter(isEmployeeVisible).flatMap((policy) => policy.keywords))].slice(0, 10);
-  els.quickTags.innerHTML = tags
-    .map((tag) => `<button class="tag-button" type="button" data-keyword="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`)
-    .join("");
-}
-
-function renderCategories() {
+function renderDepartments() {
   const visiblePolicies = state.policies.filter(isEmployeeVisible);
-  els.employeeCategories.innerHTML = getCategories()
-    .map((category) => {
-      const count = category === ALL_CATEGORY
+  els.employeeDepartments.innerHTML = getDepartments()
+    .map((department) => {
+      const count = department === ALL_DEPARTMENT
         ? visiblePolicies.length
-        : visiblePolicies.filter((policy) => policy.category === category).length;
-      const active = category === state.activeCategory ? " active" : "";
-      return `<button class="category-button${active}" type="button" data-category="${escapeHtml(category)}">${escapeHtml(category)} ${count}</button>`;
+        : visiblePolicies.filter((policy) => policy.department === department).length;
+      const active = department === state.activeDepartment ? " active" : "";
+      return `<button class="category-button${active}" type="button" data-department="${escapeHtml(department)}">${escapeHtml(department)} ${count}</button>`;
     })
     .join("");
 }
@@ -222,7 +148,7 @@ function renderEmployeeList() {
   els.employeeCount.textContent = `${policies.length} 条`;
 
   if (!policies.length) {
-    els.employeePolicyList.innerHTML = `<div class="empty-state">没有找到相关制度，可以换个关键词试试。</div>`;
+    els.employeePolicyList.innerHTML = `<div class="empty-state">没有找到相关制度，可以换个搜索内容试试。</div>`;
     els.employeePolicyDetail.innerHTML = `<div class="empty-state">暂无可查看的制度详情。</div>`;
     return;
   }
@@ -242,7 +168,7 @@ function renderEmployeeList() {
           </div>
           <div class="policy-meta">
             <span class="pill">${escapeHtml(policy.category)}</span>
-            <span>${escapeHtml(policy.owner)}</span>
+            <span>${escapeHtml(policy.department)}</span>
             <span>${escapeHtml(policy.updated)}</span>
             <span>${escapeHtml(getExecuteText(policy))}</span>
           </div>
@@ -266,26 +192,22 @@ function renderEmployeeDetail() {
     .filter(Boolean);
 
   const imageHtml = policy.imageData
-    ? `<img class="policy-image" src="${policy.imageData}" alt="${escapeHtml(policy.imageName || policy.title)}" />`
+    ? `<a class="policy-image-link" href="${policy.imageData}" target="_blank" rel="noopener"><img class="policy-image" src="${policy.imageData}" alt="${escapeHtml(policy.imageName || policy.title)}" /></a>`
     : `<div class="image-placeholder">暂无制度图片展示</div>`;
 
   els.employeePolicyDetail.innerHTML = `
     <div class="detail-header">
       <div>
-        <span class="pill">${escapeHtml(policy.category)}</span>
+        <span class="pill">${escapeHtml(policy.department)}</span>
         <h2>${highlight(policy.title, query)}</h2>
       </div>
       <span class="pill status-pill">${escapeHtml(policy.status)}</span>
     </div>
     <div class="detail-grid">
-      <div class="detail-stat"><span>责任部门</span><strong>${escapeHtml(policy.owner)}</strong></div>
+      <div class="detail-stat"><span>所属部门</span><strong>${escapeHtml(policy.department)}</strong></div>
+      <div class="detail-stat"><span>制度类型</span><strong>${escapeHtml(policy.category)}</strong></div>
       <div class="detail-stat"><span>执行时间</span><strong>${escapeHtml(getExecuteText(policy))}</strong></div>
-      <div class="detail-stat"><span>关键词</span><strong>${policy.keywords.map(escapeHtml).join("、") || "未设置"}</strong></div>
     </div>
-    <section class="detail-section">
-      <h3>图片展示</h3>
-      ${imageHtml}
-    </section>
     <section class="detail-section">
       <h3>制度摘要</h3>
       <p>${highlight(policy.summary, query)}</p>
@@ -295,6 +217,10 @@ function renderEmployeeDetail() {
       <div class="content-lines">
         ${lines.map((line) => `<div class="content-line">${highlight(line, query)}</div>`).join("") || "<p>暂无正文内容。</p>"}
       </div>
+    </section>
+    <section class="detail-section">
+      <h3>图片展示</h3>
+      ${imageHtml}
     </section>
   `;
 }
@@ -306,27 +232,13 @@ function getExecuteText(policy) {
   return "长期执行";
 }
 
-function getNoticeTimeText(notice) {
-  if (notice.start && notice.end) return `${notice.start} 至 ${notice.end}`;
-  if (notice.start) return `${notice.start} 起展示`;
-  if (notice.end) return `展示至 ${notice.end}`;
-  return "长期展示";
-}
-
 els.search.addEventListener("input", renderEmployeeList);
 
-els.quickTags.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-keyword]");
+els.employeeDepartments.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-department]");
   if (!button) return;
-  els.search.value = button.dataset.keyword;
-  renderEmployeeList();
-});
-
-els.employeeCategories.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-category]");
-  if (!button) return;
-  state.activeCategory = button.dataset.category;
-  renderCategories();
+  state.activeDepartment = button.dataset.department;
+  renderDepartments();
   renderEmployeeList();
 });
 
@@ -337,7 +249,5 @@ els.employeePolicyList.addEventListener("click", (event) => {
   renderEmployeeList();
 });
 
-renderNotices();
-renderQuickTags();
-renderCategories();
+renderDepartments();
 renderEmployeeList();

@@ -14,28 +14,25 @@
           <div class="brand-mark">新</div>
           <div>
             <h1>新火教育制度手册</h1>
-            <p>员工规章制度查询</p>
+            <p>按部门查询规章制度</p>
           </div>
         </div>
       </header>
 
-      <section class="notice-card" id="noticeCard" hidden>
-        <div class="section-heading compact-heading">
-          <h2>通知公告</h2>
-          <p id="noticeCount">0 条</p>
-        </div>
-        <div class="notice-list" id="noticeList"></div>
-      </section>
-
       <section class="search-card">
         <label class="search-box" for="employeeSearch">
           <span aria-hidden="true">⌕</span>
-          <input id="employeeSearch" type="search" placeholder="搜索制度名称、关键词或正文内容" />
+          <input id="employeeSearch" type="search" placeholder="搜索制度名称、部门或正文内容" />
         </label>
-        <div class="quick-tags" id="quickTags"></div>
       </section>
 
-      <div class="category-strip" id="employeeCategories"></div>
+      <section class="department-panel">
+        <div class="section-heading compact-heading">
+          <h2>部门制度</h2>
+          <p>按部门筛选</p>
+        </div>
+        <div class="category-strip" id="employeeDepartments"></div>
+      </section>
 
       <section class="employee-layout">
         <div class="policy-list-card">

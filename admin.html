@@ -38,50 +38,13 @@
             <div class="brand-mark">新</div>
             <div>
               <h1>制度后台管理</h1>
-              <p>新增、导入、删除和维护制度资料</p>
+              <p>新增、编辑、删除和维护制度资料</p>
             </div>
           </div>
           <button class="secondary-button" id="logoutButton" type="button">退出登录</button>
         </header>
 
         <div class="admin-grid">
-          <section class="admin-panel">
-            <div class="section-heading">
-              <h2>通知公告</h2>
-              <p id="noticeAdminCount">0 条</p>
-            </div>
-            <form class="policy-form" id="noticeForm">
-              <input type="hidden" id="noticeId" />
-              <label>
-                公告标题
-                <input id="noticeTitle" required placeholder="例如：端午节放假安排" />
-              </label>
-              <label>
-                公告内容
-                <textarea id="noticeContent" required rows="4" placeholder="填写公告正文"></textarea>
-              </label>
-              <div class="form-row">
-                <label>
-                  指定开始时间
-                  <input id="noticeStart" type="date" />
-                </label>
-                <label>
-                  指定结束时间
-                  <input id="noticeEnd" type="date" />
-                </label>
-              </div>
-              <label class="checkbox-label">
-                <input id="noticePinned" type="checkbox" />
-                置顶显示
-              </label>
-              <div class="form-actions">
-                <button class="primary-button" type="submit">保存公告</button>
-                <button class="secondary-button" id="resetNoticeButton" type="button">清空公告</button>
-              </div>
-            </form>
-            <div class="admin-list notice-admin-list" id="noticeAdminList"></div>
-          </section>
-
           <section class="admin-panel">
             <div class="section-heading">
               <h2>新增 / 编辑制度</h2>
@@ -96,12 +59,28 @@
               </label>
               <div class="form-row">
                 <label>
-                  分类
-                  <input id="policyCategory" required placeholder="例如：人事制度" />
+                  所属部门
+                  <select id="policyDepartment" required>
+                    <option value="人力行政部">人力行政部</option>
+                    <option value="教学教研部">教学教研部</option>
+                    <option value="课程顾问部">课程顾问部</option>
+                    <option value="市场运营部">市场运营部</option>
+                    <option value="财务部">财务部</option>
+                    <option value="校区管理部">校区管理部</option>
+                    <option value="综合管理部">综合管理部</option>
+                  </select>
                 </label>
                 <label>
-                  责任部门
-                  <input id="policyOwner" required placeholder="例如：人力行政部" />
+                  制度类型
+                  <select id="policyCategory" required>
+                    <option value="人事制度">人事制度</option>
+                    <option value="教学制度">教学制度</option>
+                    <option value="财务制度">财务制度</option>
+                    <option value="行政制度">行政制度</option>
+                    <option value="安全制度">安全制度</option>
+                    <option value="服务规范">服务规范</option>
+                    <option value="操作流程">操作流程</option>
+                  </select>
                 </label>
               </div>
               <div class="form-row">
@@ -130,10 +109,6 @@
                 </label>
               </div>
               <label>
-                关键词
-                <input id="policyKeywords" placeholder="多个关键词用顿号、逗号或空格分隔" />
-              </label>
-              <label>
                 制度摘要
                 <textarea id="policySummary" required rows="3" placeholder="简要说明这条制度解决什么问题"></textarea>
               </label>
@@ -141,14 +116,11 @@
                 制度正文
                 <textarea id="policyContent" required rows="8" placeholder="可直接粘贴完整制度内容，每段一行更便于阅读"></textarea>
               </label>
-              <label>
-                图片展示
+              <div class="paste-upload" id="imagePasteBox" tabindex="0">
+                <strong>图片展示</strong>
+                <p>点击选择图片，或点击此区域后直接粘贴截图/复制的图片。</p>
                 <input id="policyImage" type="file" accept="image/*" />
-              </label>
-              <label>
-                正式文件
-                <input id="policyDocument" type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,application/pdf,image/*" />
-              </label>
+              </div>
               <div class="media-preview" id="mediaPreview"></div>
 
               <div class="form-actions">
@@ -161,21 +133,49 @@
           <section class="admin-panel wide-panel">
             <div class="section-heading">
               <h2>制度库管理</h2>
-              <p id="adminCount">0 条</p>
-            </div>
-
-            <div class="import-box">
-              <h3>批量导入</h3>
-              <p>支持 JSON 文件导入，也可以把制度数组粘贴到下方文本框。图片和正式文件建议在导入后逐条上传。</p>
-              <input id="importFile" type="file" accept=".json,application/json" />
-              <textarea id="importText" rows="5" placeholder='示例：[{"title":"制度名称","category":"分类","owner":"部门","executeStart":"2026-06-01","executeEnd":"2026-08-01","summary":"摘要","content":"正文"}]'></textarea>
-              <div class="form-actions">
-                <button class="secondary-button" id="importButton" type="button">导入制度</button>
+              <div class="heading-actions">
+                <p id="adminCount">0 条</p>
                 <button class="secondary-button" id="exportButton" type="button">导出备份</button>
               </div>
             </div>
-
+            <div class="admin-filters">
+              <input id="adminSearchInput" type="search" placeholder="搜索制度名称、部门、类型或正文" />
+              <select id="adminDepartmentFilter"></select>
+              <select id="adminCategoryFilter"></select>
+              <select id="adminStatusFilter">
+                <option value="">全部状态</option>
+                <option value="现行有效">现行有效</option>
+                <option value="重点执行">重点执行</option>
+                <option value="试行">试行</option>
+                <option value="已停用">已停用</option>
+              </select>
+            </div>
             <div class="admin-list" id="adminPolicyList"></div>
+          </section>
+
+          <section class="admin-panel">
+            <div class="section-heading">
+              <h2>基础选项管理</h2>
+              <p>维护下拉选项</p>
+            </div>
+            <div class="options-manager">
+              <div class="option-box">
+                <h3>所属部门</h3>
+                <div class="option-input-row">
+                  <input id="newDepartmentInput" placeholder="新增部门名称" />
+                  <button class="secondary-button" id="addDepartmentButton" type="button">新增</button>
+                </div>
+                <div class="option-list" id="departmentOptionList"></div>
+              </div>
+              <div class="option-box">
+                <h3>制度类型</h3>
+                <div class="option-input-row">
+                  <input id="newCategoryInput" placeholder="新增制度类型" />
+                  <button class="secondary-button" id="addCategoryButton" type="button">新增</button>
+                </div>
+                <div class="option-list" id="categoryOptionList"></div>
+              </div>
+            </div>
           </section>
         </div>
       </section>

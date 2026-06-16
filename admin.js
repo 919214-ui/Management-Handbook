@@ -1,5 +1,5 @@
 const POLICY_STORAGE_KEY = "xinhua-education-policy-manual";
-const NOTICE_STORAGE_KEY = "xinhua-education-notices";
+const OPTIONS_STORAGE_KEY = "xinhua-education-policy-options";
 const LOGIN_KEY = "xinhua-education-admin-login";
 const ADMIN_ACCOUNT = "admin";
 const ADMIN_PASSWORD = "123456";
@@ -8,6 +8,7 @@ const defaultPolicies = [
   {
     id: "attendance",
     title: "员工考勤管理制度",
+    department: "人力行政部",
     category: "人事制度",
     owner: "人力行政部",
     status: "现行有效",
@@ -28,9 +29,8 @@ const defaultPolicies = [
 
 const state = {
   policies: loadPolicies(),
-  notices: loadNotices(),
-  imageDraft: null,
-  documentDraft: null
+  options: loadOptions(),
+  imageDraft: null
 };
 
 const els = {
@@ -40,38 +40,34 @@ const els = {
   loginAccount: document.querySelector("#loginAccount"),
   loginPassword: document.querySelector("#loginPassword"),
   logoutButton: document.querySelector("#logoutButton"),
-  noticeForm: document.querySelector("#noticeForm"),
-  noticeId: document.querySelector("#noticeId"),
-  noticeTitle: document.querySelector("#noticeTitle"),
-  noticeContent: document.querySelector("#noticeContent"),
-  noticeStart: document.querySelector("#noticeStart"),
-  noticeEnd: document.querySelector("#noticeEnd"),
-  noticePinned: document.querySelector("#noticePinned"),
-  resetNoticeButton: document.querySelector("#resetNoticeButton"),
-  noticeAdminCount: document.querySelector("#noticeAdminCount"),
-  noticeAdminList: document.querySelector("#noticeAdminList"),
+  newDepartmentInput: document.querySelector("#newDepartmentInput"),
+  addDepartmentButton: document.querySelector("#addDepartmentButton"),
+  departmentOptionList: document.querySelector("#departmentOptionList"),
+  newCategoryInput: document.querySelector("#newCategoryInput"),
+  addCategoryButton: document.querySelector("#addCategoryButton"),
+  categoryOptionList: document.querySelector("#categoryOptionList"),
   form: document.querySelector("#policyForm"),
   formHint: document.querySelector("#formHint"),
   policyId: document.querySelector("#policyId"),
   policyTitle: document.querySelector("#policyTitle"),
+  policyDepartment: document.querySelector("#policyDepartment"),
   policyCategory: document.querySelector("#policyCategory"),
-  policyOwner: document.querySelector("#policyOwner"),
   policyStatus: document.querySelector("#policyStatus"),
   policyUpdated: document.querySelector("#policyUpdated"),
   policyExecuteStart: document.querySelector("#policyExecuteStart"),
   policyExecuteEnd: document.querySelector("#policyExecuteEnd"),
-  policyKeywords: document.querySelector("#policyKeywords"),
   policySummary: document.querySelector("#policySummary"),
   policyContent: document.querySelector("#policyContent"),
   policyImage: document.querySelector("#policyImage"),
-  policyDocument: document.querySelector("#policyDocument"),
+  imagePasteBox: document.querySelector("#imagePasteBox"),
   mediaPreview: document.querySelector("#mediaPreview"),
   resetFormButton: document.querySelector("#resetFormButton"),
   adminCount: document.querySelector("#adminCount"),
   adminPolicyList: document.querySelector("#adminPolicyList"),
-  importFile: document.querySelector("#importFile"),
-  importText: document.querySelector("#importText"),
-  importButton: document.querySelector("#importButton"),
+  adminSearchInput: document.querySelector("#adminSearchInput"),
+  adminDepartmentFilter: document.querySelector("#adminDepartmentFilter"),
+  adminCategoryFilter: document.querySelector("#adminCategoryFilter"),
+  adminStatusFilter: document.querySelector("#adminStatusFilter"),
   exportButton: document.querySelector("#exportButton"),
   toast: document.querySelector("#toast")
 };
@@ -86,13 +82,21 @@ function loadPolicies() {
   }
 }
 
-function loadNotices() {
+function loadOptions() {
+  const defaults = {
+    departments: ["人力行政部", "教学教研部", "课程顾问部", "市场运营部", "财务部", "校区管理部", "综合管理部"],
+    categories: ["人事制度", "教学制度", "财务制度", "行政制度", "安全制度", "服务规范", "操作流程"]
+  };
+
   try {
-    const saved = localStorage.getItem(NOTICE_STORAGE_KEY);
-    const list = saved ? JSON.parse(saved) : [];
-    return list.map(normalizeNotice);
+    const saved = localStorage.getItem(OPTIONS_STORAGE_KEY);
+    const parsed = saved ? JSON.parse(saved) : defaults;
+    return {
+      departments: normalizeOptions(parsed.departments, defaults.departments),
+      categories: normalizeOptions(parsed.categories, defaults.categories)
+    };
   } catch {
-    return [];
+    return defaults;
   }
 }
 
@@ -100,8 +104,8 @@ function savePolicies() {
   localStorage.setItem(POLICY_STORAGE_KEY, JSON.stringify(state.policies));
 }
 
-function saveNotices() {
-  localStorage.setItem(NOTICE_STORAGE_KEY, JSON.stringify(state.notices));
+function saveOptions() {
+  localStorage.setItem(OPTIONS_STORAGE_KEY, JSON.stringify(state.options));
 }
 
 function createId(prefix) {
@@ -119,13 +123,28 @@ function splitKeywords(value) {
     .filter(Boolean);
 }
 
+function normalizeOptions(values, fallback) {
+  const source = Array.isArray(values) && values.length ? values : fallback;
+  return [...new Set(source.map((item) => String(item).trim()).filter(Boolean))];
+}
+
+function buildKeywords(fields) {
+  return [...new Set([
+    fields.department,
+    fields.category,
+    ...splitKeywords(fields.title),
+    ...splitKeywords(fields.summary)
+  ].filter(Boolean))];
+}
+
 function normalizePolicy(policy) {
   const keywords = Array.isArray(policy.keywords) ? policy.keywords : splitKeywords(policy.keywords || "");
   return {
     id: policy.id || createId("policy"),
     title: String(policy.title || "未命名制度").trim(),
+    department: String(policy.department || policy.owner || "未设置部门").trim(),
     category: String(policy.category || "未分类").trim(),
-    owner: String(policy.owner || "未设置").trim(),
+    owner: String(policy.owner || policy.department || "未设置").trim(),
     status: String(policy.status || "现行有效").trim(),
     updated: String(policy.updated || today()).trim(),
     executeStart: String(policy.executeStart || "").trim(),
@@ -138,18 +157,6 @@ function normalizePolicy(policy) {
     documentData: policy.documentData || "",
     documentName: policy.documentName || "",
     documentType: policy.documentType || ""
-  };
-}
-
-function normalizeNotice(notice) {
-  return {
-    id: notice.id || createId("notice"),
-    title: String(notice.title || "未命名公告").trim(),
-    content: String(notice.content || "").trim(),
-    start: String(notice.start || "").trim(),
-    end: String(notice.end || "").trim(),
-    pinned: Boolean(notice.pinned),
-    createdAt: String(notice.createdAt || today()).trim()
   };
 }
 
@@ -190,20 +197,10 @@ function renderMediaPreview(policy = null) {
     name: policy.imageName,
     type: "image/*"
   } : null);
-  const documentFile = state.documentDraft || (policy?.documentData ? {
-    data: policy.documentData,
-    name: policy.documentName,
-    type: policy.documentType
-  } : null);
-
   els.mediaPreview.innerHTML = `
     <div class="preview-box">
       <strong>图片展示</strong>
-      ${image ? `<img src="${image.data}" alt="${escapeHtml(image.name || "制度图片")}" />` : `<p>未选择图片</p>`}
-    </div>
-    <div class="preview-box">
-      <strong>正式文件</strong>
-      ${documentFile ? `<p>${escapeHtml(documentFile.name || "已上传文件")}</p>` : `<p>未选择正式文件</p>`}
+      ${image ? `<a href="${image.data}" target="_blank" rel="noopener"><img src="${image.data}" alt="${escapeHtml(image.name || "制度图片")}" /></a>` : `<p>未选择图片，可点击选择或粘贴上传。</p>`}
     </div>
   `;
 }
@@ -216,93 +213,137 @@ function resetForm() {
   els.policyExecuteEnd.value = "";
   els.formHint.textContent = "填写后保存到制度库";
   state.imageDraft = null;
-  state.documentDraft = null;
   renderMediaPreview();
 }
 
-function resetNoticeForm() {
-  els.noticeForm.reset();
-  els.noticeId.value = "";
+function renderSelectOptions() {
+  syncOptionsWithPolicies();
+  els.policyDepartment.innerHTML = state.options.departments
+    .map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`)
+    .join("");
+  els.policyCategory.innerHTML = state.options.categories
+    .map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`)
+    .join("");
+  renderAdminFilters();
+}
+
+function renderAdminFilters() {
+  const selectedDepartment = els.adminDepartmentFilter.value;
+  const selectedCategory = els.adminCategoryFilter.value;
+  els.adminDepartmentFilter.innerHTML = [
+    `<option value="">全部部门</option>`,
+    ...state.options.departments.map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`)
+  ].join("");
+  els.adminCategoryFilter.innerHTML = [
+    `<option value="">全部类型</option>`,
+    ...state.options.categories.map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`)
+  ].join("");
+  els.adminDepartmentFilter.value = state.options.departments.includes(selectedDepartment) ? selectedDepartment : "";
+  els.adminCategoryFilter.value = state.options.categories.includes(selectedCategory) ? selectedCategory : "";
+}
+
+function renderOptionLists() {
+  els.departmentOptionList.innerHTML = state.options.departments
+    .map((item) => renderOptionTag(item, "department"))
+    .join("");
+  els.categoryOptionList.innerHTML = state.options.categories
+    .map((item) => renderOptionTag(item, "category"))
+    .join("");
+}
+
+function renderOptionTag(item, type) {
+  return `
+    <span class="option-tag">
+      ${escapeHtml(item)}
+      <button type="button" aria-label="删除${escapeHtml(item)}" data-option-type="${type}" data-option-value="${escapeHtml(item)}">×</button>
+    </span>
+  `;
+}
+
+function syncOptionsWithPolicies() {
+  state.options.departments = normalizeOptions([
+    ...state.options.departments,
+    ...state.policies.map((policy) => policy.department)
+  ], state.options.departments);
+  state.options.categories = normalizeOptions([
+    ...state.options.categories,
+    ...state.policies.map((policy) => policy.category)
+  ], state.options.categories);
+}
+
+function addOption(type, value) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    showToast("请输入选项名称");
+    return;
+  }
+  const key = type === "department" ? "departments" : "categories";
+  if (!state.options[key].includes(trimmed)) state.options[key].push(trimmed);
+  saveOptions();
+  renderSelectOptions();
+  renderOptionLists();
+  showToast("选项已保存");
+}
+
+function deleteOption(type, value) {
+  const key = type === "department" ? "departments" : "categories";
+  const used = type === "department"
+    ? state.policies.some((policy) => policy.department === value)
+    : state.policies.some((policy) => policy.category === value);
+  if (used) {
+    showToast("已有制度正在使用该选项，不能删除");
+    return;
+  }
+  state.options[key] = state.options[key].filter((item) => item !== value);
+  saveOptions();
+  renderSelectOptions();
+  renderOptionLists();
+  showToast("选项已删除");
 }
 
 function fillForm(policy) {
   els.policyId.value = policy.id;
   els.policyTitle.value = policy.title;
+  els.policyDepartment.value = policy.department;
   els.policyCategory.value = policy.category;
-  els.policyOwner.value = policy.owner;
   els.policyStatus.value = policy.status;
   els.policyUpdated.value = policy.updated;
   els.policyExecuteStart.value = policy.executeStart;
   els.policyExecuteEnd.value = policy.executeEnd;
-  els.policyKeywords.value = policy.keywords.join("、");
   els.policySummary.value = policy.summary;
   els.policyContent.value = policy.content;
   els.formHint.textContent = `正在编辑：${policy.title}`;
   state.imageDraft = null;
-  state.documentDraft = null;
   renderMediaPreview(policy);
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function fillNoticeForm(notice) {
-  els.noticeId.value = notice.id;
-  els.noticeTitle.value = notice.title;
-  els.noticeContent.value = notice.content;
-  els.noticeStart.value = notice.start;
-  els.noticeEnd.value = notice.end;
-  els.noticePinned.checked = notice.pinned;
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-function renderNoticeAdminList() {
-  els.noticeAdminCount.textContent = `${state.notices.length} 条`;
-
-  if (!state.notices.length) {
-    els.noticeAdminList.innerHTML = `<div class="empty-state">暂无公告，可以先新增一条通知。</div>`;
-    return;
-  }
-
-  els.noticeAdminList.innerHTML = state.notices
-    .slice()
-    .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.createdAt.localeCompare(a.createdAt))
-    .map((notice) => `
-      <article class="admin-item">
-        <div class="policy-title-row">
-          <h3>${escapeHtml(notice.title)}</h3>
-          ${notice.pinned ? `<span class="pill status-pill">置顶</span>` : ""}
-        </div>
-        <p>${escapeHtml(notice.content)}</p>
-        <div class="policy-meta">
-          <span>${escapeHtml(getNoticeTimeText(notice))}</span>
-        </div>
-        <div class="item-actions">
-          <button class="secondary-button" type="button" data-edit-notice-id="${notice.id}">编辑</button>
-          <button class="danger-button" type="button" data-delete-notice-id="${notice.id}">删除</button>
-        </div>
-      </article>
-    `)
-    .join("");
-}
-
 function renderAdminList() {
-  els.adminCount.textContent = `${state.policies.length} 条`;
+  const policies = getFilteredAdminPolicies();
+  els.adminCount.textContent = `${policies.length} / ${state.policies.length} 条`;
 
   if (!state.policies.length) {
-    els.adminPolicyList.innerHTML = `<div class="empty-state">制度库为空，可以先新增或导入制度。</div>`;
+    els.adminPolicyList.innerHTML = `<div class="empty-state">制度库为空，可以先新增制度。</div>`;
     return;
   }
 
-  els.adminPolicyList.innerHTML = state.policies
+  if (!policies.length) {
+    els.adminPolicyList.innerHTML = `<div class="empty-state">没有找到匹配的制度。</div>`;
+    return;
+  }
+
+  els.adminPolicyList.innerHTML = policies
     .map((policy) => `
       <article class="admin-item">
         <div class="policy-title-row">
           <h3>${escapeHtml(policy.title)}</h3>
+          <span class="pill">${escapeHtml(policy.department)}</span>
           <span class="pill">${escapeHtml(policy.category)}</span>
-          ${policy.documentData ? `<span class="pill status-pill">有正式文件</span>` : ""}
+          ${policy.imageData ? `<span class="pill status-pill">有图片</span>` : ""}
         </div>
         <p>${escapeHtml(policy.summary || "暂无摘要")}</p>
         <div class="policy-meta">
-          <span>${escapeHtml(policy.owner)}</span>
+          <span>${escapeHtml(policy.department)}</span>
           <span>${escapeHtml(policy.updated)}</span>
           <span>${escapeHtml(getExecuteText(policy))}</span>
           <span>${escapeHtml(policy.status)}</span>
@@ -317,23 +358,26 @@ function renderAdminList() {
     .join("");
 }
 
-function importPolicies(rawText) {
-  const parsed = JSON.parse(rawText);
-  const incoming = Array.isArray(parsed) ? parsed : parsed.policies;
-  if (!Array.isArray(incoming)) {
-    throw new Error("导入内容需要是制度数组，或包含 policies 数组。");
-  }
+function getFilteredAdminPolicies() {
+  const query = els.adminSearchInput.value.trim().toLowerCase();
+  const department = els.adminDepartmentFilter.value;
+  const category = els.adminCategoryFilter.value;
+  const status = els.adminStatusFilter.value;
 
-  const normalized = incoming.map(normalizePolicy);
-  const existingIds = new Set(state.policies.map((policy) => policy.id));
-  normalized.forEach((policy) => {
-    if (existingIds.has(policy.id)) policy.id = createId("policy");
+  return state.policies.filter((policy) => {
+    const text = [
+      policy.title,
+      policy.department,
+      policy.category,
+      policy.status,
+      policy.summary,
+      policy.content
+    ].join(" ").toLowerCase();
+    return (!query || text.includes(query))
+      && (!department || policy.department === department)
+      && (!category || policy.category === category)
+      && (!status || policy.status === status);
   });
-
-  state.policies = [...normalized, ...state.policies];
-  savePolicies();
-  renderAdminList();
-  showToast(`已导入 ${normalized.length} 条制度`);
 }
 
 function getExecuteText(policy) {
@@ -341,13 +385,6 @@ function getExecuteText(policy) {
   if (policy.executeStart) return `${policy.executeStart} 起执行`;
   if (policy.executeEnd) return `执行至 ${policy.executeEnd}`;
   return "长期执行";
-}
-
-function getNoticeTimeText(notice) {
-  if (notice.start && notice.end) return `${notice.start} 至 ${notice.end}`;
-  if (notice.start) return `${notice.start} 起展示`;
-  if (notice.end) return `展示至 ${notice.end}`;
-  return "长期展示";
 }
 
 els.loginForm.addEventListener("submit", (event) => {
@@ -359,7 +396,6 @@ els.loginForm.addEventListener("submit", (event) => {
     return;
   }
   setLoggedIn(true);
-  renderNoticeAdminList();
   renderAdminList();
   showToast("已登录后台");
 });
@@ -369,51 +405,26 @@ els.logoutButton.addEventListener("click", () => {
   showToast("已退出登录");
 });
 
-els.noticeForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const notice = normalizeNotice({
-    id: els.noticeId.value || createId("notice"),
-    title: els.noticeTitle.value,
-    content: els.noticeContent.value,
-    start: els.noticeStart.value,
-    end: els.noticeEnd.value,
-    pinned: els.noticePinned.checked,
-    createdAt: state.notices.find((item) => item.id === els.noticeId.value)?.createdAt || today()
-  });
-
-  const index = state.notices.findIndex((item) => item.id === notice.id);
-  if (index >= 0) {
-    state.notices.splice(index, 1, notice);
-  } else {
-    state.notices.unshift(notice);
-  }
-  saveNotices();
-  resetNoticeForm();
-  renderNoticeAdminList();
-  showToast("公告已保存");
+els.addDepartmentButton.addEventListener("click", () => {
+  addOption("department", els.newDepartmentInput.value);
+  els.newDepartmentInput.value = "";
 });
 
-els.resetNoticeButton.addEventListener("click", resetNoticeForm);
+els.addCategoryButton.addEventListener("click", () => {
+  addOption("category", els.newCategoryInput.value);
+  els.newCategoryInput.value = "";
+});
 
-els.noticeAdminList.addEventListener("click", (event) => {
-  const editButton = event.target.closest("[data-edit-notice-id]");
-  const deleteButton = event.target.closest("[data-delete-notice-id]");
+els.departmentOptionList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-option-type]");
+  if (!button) return;
+  deleteOption(button.dataset.optionType, button.dataset.optionValue);
+});
 
-  if (editButton) {
-    const notice = state.notices.find((item) => item.id === editButton.dataset.editNoticeId);
-    if (notice) fillNoticeForm(notice);
-  }
-
-  if (deleteButton) {
-    const notice = state.notices.find((item) => item.id === deleteButton.dataset.deleteNoticeId);
-    if (!notice) return;
-    const confirmed = window.confirm(`确定删除公告《${notice.title}》吗？`);
-    if (!confirmed) return;
-    state.notices = state.notices.filter((item) => item.id !== notice.id);
-    saveNotices();
-    renderNoticeAdminList();
-    showToast("公告已删除");
-  }
+els.categoryOptionList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-option-type]");
+  if (!button) return;
+  deleteOption(button.dataset.optionType, button.dataset.optionValue);
 });
 
 els.policyImage.addEventListener("change", async () => {
@@ -423,11 +434,17 @@ els.policyImage.addEventListener("change", async () => {
   renderMediaPreview(policy);
 });
 
-els.policyDocument.addEventListener("change", async () => {
-  const file = els.policyDocument.files[0];
-  state.documentDraft = file ? await fileToDraft(file) : null;
+els.imagePasteBox.addEventListener("paste", async (event) => {
+  const imageItem = [...event.clipboardData.items].find((item) => item.type.startsWith("image/"));
+  if (!imageItem) {
+    showToast("剪贴板里没有图片");
+    return;
+  }
+  event.preventDefault();
+  state.imageDraft = await fileToDraft(imageItem.getAsFile());
   const policy = state.policies.find((item) => item.id === els.policyId.value);
   renderMediaPreview(policy);
+  showToast("图片已粘贴上传");
 });
 
 els.form.addEventListener("submit", (event) => {
@@ -436,20 +453,26 @@ els.form.addEventListener("submit", (event) => {
   const policy = normalizePolicy({
     id: els.policyId.value || createId("policy"),
     title: els.policyTitle.value,
+    department: els.policyDepartment.value,
     category: els.policyCategory.value,
-    owner: els.policyOwner.value,
+    owner: els.policyDepartment.value,
     status: els.policyStatus.value,
     updated: els.policyUpdated.value,
     executeStart: els.policyExecuteStart.value,
     executeEnd: els.policyExecuteEnd.value,
-    keywords: splitKeywords(els.policyKeywords.value),
+    keywords: buildKeywords({
+      title: els.policyTitle.value,
+      department: els.policyDepartment.value,
+      category: els.policyCategory.value,
+      summary: els.policySummary.value
+    }),
     summary: els.policySummary.value,
     content: els.policyContent.value,
     imageData: state.imageDraft?.data || existing?.imageData || "",
     imageName: state.imageDraft?.name || existing?.imageName || "",
-    documentData: state.documentDraft?.data || existing?.documentData || "",
-    documentName: state.documentDraft?.name || existing?.documentName || "",
-    documentType: state.documentDraft?.type || existing?.documentType || ""
+    documentData: "",
+    documentName: "",
+    documentType: ""
   });
 
   const index = state.policies.findIndex((item) => item.id === policy.id);
@@ -466,6 +489,11 @@ els.form.addEventListener("submit", (event) => {
 });
 
 els.resetFormButton.addEventListener("click", resetForm);
+
+[els.adminSearchInput, els.adminDepartmentFilter, els.adminCategoryFilter, els.adminStatusFilter].forEach((control) => {
+  control.addEventListener("input", renderAdminList);
+  control.addEventListener("change", renderAdminList);
+});
 
 els.adminPolicyList.addEventListener("click", (event) => {
   const editButton = event.target.closest("[data-edit-id]");
@@ -488,33 +516,8 @@ els.adminPolicyList.addEventListener("click", (event) => {
   }
 });
 
-els.importFile.addEventListener("change", async () => {
-  const file = els.importFile.files[0];
-  if (!file) return;
-  els.importText.value = await file.text();
-});
-
-els.importButton.addEventListener("click", () => {
-  try {
-    const text = els.importText.value.trim();
-    if (!text) {
-      showToast("请先选择文件或粘贴 JSON 内容");
-      return;
-    }
-    importPolicies(text);
-    els.importText.value = "";
-    els.importFile.value = "";
-  } catch (error) {
-    showToast(error.message || "导入失败，请检查格式");
-  }
-});
-
 els.exportButton.addEventListener("click", () => {
-  const backup = {
-    policies: state.policies,
-    notices: state.notices
-  };
-  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json;charset=utf-8" });
+  const blob = new Blob([JSON.stringify(state.policies, null, 2)], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -525,7 +528,7 @@ els.exportButton.addEventListener("click", () => {
 });
 
 resetForm();
-resetNoticeForm();
+renderSelectOptions();
+renderOptionLists();
 setLoggedIn(localStorage.getItem(LOGIN_KEY) === "1");
-renderNoticeAdminList();
 renderAdminList();
