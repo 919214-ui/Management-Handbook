@@ -1,4 +1,5 @@
 const POLICY_STORAGE_KEY = "xinhua-education-policy-manual";
+const serverData = loadServerDataSync();
 const ALL_DEPARTMENT = "全部部门";
 
 const defaultPolicies = [
@@ -40,11 +41,24 @@ const els = {
 
 function loadPolicies() {
   try {
+    if (serverData?.policies) return serverData.policies.map(normalizePolicy);
     const saved = localStorage.getItem(POLICY_STORAGE_KEY);
     const list = saved ? JSON.parse(saved) : defaultPolicies;
     return list.map(normalizePolicy);
   } catch {
     return defaultPolicies.map(normalizePolicy);
+  }
+}
+
+function loadServerDataSync() {
+  if (window.location.protocol === "file:") return null;
+  try {
+    const request = new XMLHttpRequest();
+    request.open("GET", `/api/data?t=${Date.now()}`, false);
+    request.send();
+    return request.status === 200 ? JSON.parse(request.responseText) : null;
+  } catch {
+    return null;
   }
 }
 

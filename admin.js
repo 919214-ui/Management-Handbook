@@ -2,6 +2,7 @@ const POLICY_STORAGE_KEY = "xinhua-education-policy-manual";
 const OPTIONS_STORAGE_KEY = "xinhua-education-policy-options";
 const LOGIN_KEY = "xinhua-education-admin-login";
 const ACCOUNT_STORAGE_KEY = "xinhua-education-admin-account";
+const serverData = loadServerDataSync();
 let adminCredentials = loadAdminCredentials();
 
 const defaultPolicies = [
@@ -78,6 +79,7 @@ const els = {
 
 function loadPolicies() {
   try {
+    if (serverData?.policies?.length) return serverData.policies.map(normalizePolicy);
     const saved = localStorage.getItem(POLICY_STORAGE_KEY);
     const list = saved ? JSON.parse(saved) : defaultPolicies;
     return list.map(normalizePolicy);
@@ -86,11 +88,24 @@ function loadPolicies() {
   }
 }
 
+function loadServerDataSync() {
+  if (window.location.protocol === "file:") return null;
+  try {
+    const request = new XMLHttpRequest();
+    request.open("GET", `/api/data?t=${Date.now()}`, false);
+    request.send();
+    return request.status === 200 ? JSON.parse(request.responseText) : null;
+  } catch {
+    return null;
+  }
+}
+
 function loadAdminCredentials() {
   const fallback = {
     account: window.XH_ADMIN_CONFIG?.account || "admin",
     password: window.XH_ADMIN_CONFIG?.password || "123456"
   };
+  if (serverData?.account) return { ...fallback, ...serverData.account };
 
   try {
     const saved = localStorage.getItem(ACCOUNT_STORAGE_KEY);
@@ -102,6 +117,7 @@ function loadAdminCredentials() {
 
 function saveAdminCredentials(credentials) {
   adminCredentials = credentials;
+  saveServerSectionSync("account", credentials);
   localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(credentials));
 }
 
@@ -113,7 +129,7 @@ function loadOptions() {
 
   try {
     const saved = localStorage.getItem(OPTIONS_STORAGE_KEY);
-    const parsed = saved ? JSON.parse(saved) : defaults;
+    const parsed = serverData?.options || (saved ? JSON.parse(saved) : defaults);
     return {
       departments: normalizeOptions(parsed.departments, defaults.departments),
       categories: normalizeOptions(parsed.categories, defaults.categories)
@@ -124,11 +140,26 @@ function loadOptions() {
 }
 
 function savePolicies() {
+  saveServerSectionSync("policies", state.policies);
   localStorage.setItem(POLICY_STORAGE_KEY, JSON.stringify(state.policies));
 }
 
 function saveOptions() {
+  saveServerSectionSync("options", state.options);
   localStorage.setItem(OPTIONS_STORAGE_KEY, JSON.stringify(state.options));
+}
+
+function saveServerSectionSync(section, payload) {
+  if (window.location.protocol === "file:") return false;
+  try {
+    const request = new XMLHttpRequest();
+    request.open("POST", `/api/${section}`, false);
+    request.setRequestHeader("Content-Type", "application/json;charset=utf-8");
+    request.send(JSON.stringify(payload));
+    return request.status >= 200 && request.status < 300;
+  } catch {
+    return false;
+  }
 }
 
 function createId(prefix) {
@@ -591,4 +622,7 @@ renderSelectOptions();
 renderOptionLists();
 renderAccountForm();
 setLoggedIn(localStorage.getItem(LOGIN_KEY) === "1");
+if (serverData && !serverData.policies?.length && localStorage.getItem(POLICY_STORAGE_KEY) && state.policies.length) {
+  savePolicies();
+}
 renderAdminList();
