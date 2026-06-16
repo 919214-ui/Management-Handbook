@@ -180,9 +180,25 @@ p {
 
 .employee-layout {
   display: grid;
-  grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
+  grid-template-columns: 1fr;
   gap: 16px;
   margin-top: 14px;
+}
+
+.employee-app:not(.detail-mode) .policy-detail {
+  display: none;
+}
+
+.employee-app.detail-mode .search-card,
+.employee-app.detail-mode .department-panel,
+.employee-app.detail-mode .policy-list-card {
+  display: none;
+}
+
+.employee-app.detail-mode .employee-layout {
+  display: block;
+  width: min(900px, 100%);
+  margin: 18px auto 0;
 }
 
 .section-heading {
@@ -289,7 +305,7 @@ p {
 }
 
 .policy-detail {
-  min-height: 540px;
+  min-height: 0;
   padding: 22px;
   background:
     linear-gradient(180deg, rgba(255, 237, 213, 0.56), rgba(255, 253, 248, 0) 190px),
@@ -398,14 +414,14 @@ p {
 
 .content-lines {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .content-line {
-  border-left: 3px solid var(--brand);
-  padding: 2px 0 2px 12px;
+  margin: 0;
+  padding: 0;
   color: #5f4636;
-  line-height: 1.8;
+  line-height: 1.9;
   overflow-wrap: anywhere;
 }
 

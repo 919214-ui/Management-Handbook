@@ -1,6 +1,6 @@
 const POLICY_STORAGE_KEY = "xinhua-education-policy-manual";
-const serverData = loadServerDataSync();
 const ALL_DEPARTMENT = "全部部门";
+const serverData = loadServerDataSync();
 
 const defaultPolicies = [
   {
@@ -18,37 +18,25 @@ const defaultPolicies = [
     content:
       "员工应按公司规定时间上下班，并通过指定系统完成打卡。\n因外勤、出差、客户拜访无法正常打卡的，应在当日提交外勤说明。\n迟到、早退、缺卡等异常记录由员工本人在三个工作日内发起说明。\n连续或频繁出现考勤异常的，由直属上级与人力行政部共同跟进。",
     imageData: "",
-    imageName: "",
-    documentData: "",
-    documentName: "",
-    documentType: ""
+    imageName: ""
   }
 ];
 
 const state = {
   policies: loadPolicies(),
   activeDepartment: ALL_DEPARTMENT,
-  activePolicyId: getSharedPolicyId()
+  activePolicyId: getSharedPolicyId(),
+  detailMode: Boolean(getSharedPolicyId())
 };
 
 const els = {
+  app: document.querySelector(".employee-app"),
   search: document.querySelector("#employeeSearch"),
   employeeDepartments: document.querySelector("#employeeDepartments"),
   employeeCount: document.querySelector("#employeeCount"),
   employeePolicyList: document.querySelector("#employeePolicyList"),
   employeePolicyDetail: document.querySelector("#employeePolicyDetail")
 };
-
-function loadPolicies() {
-  try {
-    if (serverData?.policies) return serverData.policies.map(normalizePolicy);
-    const saved = localStorage.getItem(POLICY_STORAGE_KEY);
-    const list = saved ? JSON.parse(saved) : defaultPolicies;
-    return list.map(normalizePolicy);
-  } catch {
-    return defaultPolicies.map(normalizePolicy);
-  }
-}
 
 function loadServerDataSync() {
   if (window.location.protocol === "file:") return null;
@@ -59,6 +47,17 @@ function loadServerDataSync() {
     return request.status === 200 ? JSON.parse(request.responseText) : null;
   } catch {
     return null;
+  }
+}
+
+function loadPolicies() {
+  try {
+    if (serverData?.policies?.length) return serverData.policies.map(normalizePolicy);
+    const saved = localStorage.getItem(POLICY_STORAGE_KEY);
+    const list = saved ? JSON.parse(saved) : defaultPolicies;
+    return list.map(normalizePolicy);
+  } catch {
+    return defaultPolicies.map(normalizePolicy);
   }
 }
 
@@ -82,10 +81,7 @@ function normalizePolicy(policy) {
     summary: String(policy.summary || "").trim(),
     content: String(policy.content || policy.body || "").trim(),
     imageData: policy.imageData || "",
-    imageName: policy.imageName || "",
-    documentData: policy.documentData || "",
-    documentName: policy.documentName || "",
-    documentType: policy.documentType || ""
+    imageName: policy.imageName || ""
   };
 }
 
@@ -135,9 +131,7 @@ function getFilteredPolicies() {
       policy.summary,
       policy.content,
       policy.keywords.join(" ")
-    ]
-      .join(" ")
-      .toLowerCase();
+    ].join(" ").toLowerCase();
     return departmentMatch && (!query || text.includes(query));
   });
 }
@@ -168,42 +162,35 @@ function renderEmployeeList() {
 
   if (!policies.length) {
     els.employeePolicyList.innerHTML = `<div class="empty-state">没有找到相关制度，可以换个搜索内容试试。</div>`;
-    els.employeePolicyDetail.innerHTML = `<div class="empty-state">暂无可查看的制度详情。</div>`;
+    els.employeePolicyDetail.innerHTML = "";
     return;
   }
 
-  if (!policies.some((policy) => policy.id === state.activePolicyId)) {
-    state.activePolicyId = policies[0].id;
-  }
-
   els.employeePolicyList.innerHTML = policies
-    .map((policy) => {
-      const active = policy.id === state.activePolicyId ? " active" : "";
-      return `
-        <button class="policy-item${active}" type="button" data-policy-id="${policy.id}">
-          <div class="policy-title-row">
-            <h3>${highlight(policy.title, query)}</h3>
-            <span class="pill status-pill">${escapeHtml(policy.status)}</span>
-          </div>
-          <div class="policy-meta">
-            <span class="pill">${escapeHtml(policy.category)}</span>
-            <span>${escapeHtml(policy.department)}</span>
-            <span>${escapeHtml(policy.updated)}</span>
-            <span>${escapeHtml(getExecuteText(policy))}</span>
-          </div>
-          <p>${highlight(policy.summary, query)}</p>
-        </button>
-      `;
-    })
+    .map((policy) => `
+      <button class="policy-item" type="button" data-policy-id="${policy.id}">
+        <div class="policy-title-row">
+          <h3>${highlight(policy.title, query)}</h3>
+          <span class="pill status-pill">${escapeHtml(policy.status)}</span>
+        </div>
+        <div class="policy-meta">
+          <span class="pill">${escapeHtml(policy.category)}</span>
+          <span>${escapeHtml(policy.department)}</span>
+          <span>${escapeHtml(policy.updated)}</span>
+          <span>${escapeHtml(getExecuteText(policy))}</span>
+        </div>
+        <p>${highlight(policy.summary, query)}</p>
+      </button>
+    `)
     .join("");
-
-  renderEmployeeDetail();
 }
 
 function renderEmployeeDetail() {
-  const policy = state.policies.find((item) => item.id === state.activePolicyId) || getFilteredPolicies()[0];
-  const query = els.search.value;
-  if (!policy) return;
+  const policy = state.policies.find((item) => item.id === state.activePolicyId);
+  if (!policy || !isEmployeeVisible(policy)) {
+    els.employeePolicyDetail.innerHTML = `<div class="empty-state">这条制度不存在或已下架。</div>`;
+    return;
+  }
 
   const lines = policy.content
     .split(/\n+/)
@@ -218,11 +205,12 @@ function renderEmployeeDetail() {
     <div class="detail-header">
       <div>
         <span class="pill">${escapeHtml(policy.department)}</span>
-        <h2>${highlight(policy.title, query)}</h2>
+        <h2>${escapeHtml(policy.title)}</h2>
       </div>
       <div class="detail-actions">
         <span class="pill status-pill">${escapeHtml(policy.status)}</span>
-        <button class="secondary-button" type="button" data-share-policy="${policy.id}">分享制度</button>
+        <button class="secondary-button" type="button" data-back-list>返回列表</button>
+        <button class="primary-button" type="button" data-share-policy="${policy.id}">分享制度</button>
       </div>
     </div>
     <div class="detail-grid">
@@ -232,12 +220,12 @@ function renderEmployeeDetail() {
     </div>
     <section class="detail-section">
       <h3>制度摘要</h3>
-      <p>${highlight(policy.summary, query)}</p>
+      <p>${escapeHtml(policy.summary)}</p>
     </section>
     <section class="detail-section">
       <h3>制度正文</h3>
       <div class="content-lines">
-        ${lines.map((line) => `<div class="content-line">${highlight(line, query)}</div>`).join("") || "<p>暂无正文内容。</p>"}
+        ${lines.map((line) => `<p class="content-line">${escapeHtml(line)}</p>`).join("") || "<p>暂无正文内容。</p>"}
       </div>
     </section>
     <section class="detail-section">
@@ -247,10 +235,54 @@ function renderEmployeeDetail() {
   `;
 }
 
+function renderPage() {
+  els.app.classList.toggle("detail-mode", state.detailMode);
+  if (state.detailMode) {
+    renderEmployeeDetail();
+  } else {
+    renderDepartments();
+    renderEmployeeList();
+    els.employeePolicyDetail.innerHTML = "";
+  }
+}
+
+function openPolicy(policyId) {
+  state.activePolicyId = policyId;
+  state.detailMode = true;
+  window.history.pushState(null, "", getPolicyShareUrl(policyId));
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  renderPage();
+}
+
+function backToList() {
+  state.detailMode = false;
+  state.activePolicyId = "";
+  const url = new URL(window.location.href);
+  url.searchParams.delete("policy");
+  window.history.pushState(null, "", url.toString());
+  renderPage();
+}
+
 function getPolicyShareUrl(policyId) {
   const url = new URL(window.location.href);
   url.searchParams.set("policy", policyId);
   return url.toString();
+}
+
+async function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
 }
 
 async function sharePolicy(policy) {
@@ -260,7 +292,7 @@ async function sharePolicy(policy) {
     await navigator.share({ title, text: policy.summary, url });
     return;
   }
-  await navigator.clipboard.writeText(url);
+  await copyText(url);
   alert("制度链接已复制，可以直接发送给同事。");
 }
 
@@ -284,15 +316,19 @@ els.employeeDepartments.addEventListener("click", (event) => {
 els.employeePolicyList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-policy-id]");
   if (!button) return;
-  state.activePolicyId = button.dataset.policyId;
-  window.history.replaceState(null, "", getPolicyShareUrl(state.activePolicyId));
-  renderEmployeeList();
+  openPolicy(button.dataset.policyId);
 });
 
 els.employeePolicyDetail.addEventListener("click", async (event) => {
-  const button = event.target.closest("[data-share-policy]");
-  if (!button) return;
-  const policy = state.policies.find((item) => item.id === button.dataset.sharePolicy);
+  const backButton = event.target.closest("[data-back-list]");
+  if (backButton) {
+    backToList();
+    return;
+  }
+
+  const shareButton = event.target.closest("[data-share-policy]");
+  if (!shareButton) return;
+  const policy = state.policies.find((item) => item.id === shareButton.dataset.sharePolicy);
   if (!policy) return;
   try {
     await sharePolicy(policy);
@@ -301,5 +337,10 @@ els.employeePolicyDetail.addEventListener("click", async (event) => {
   }
 });
 
-renderDepartments();
-renderEmployeeList();
+window.addEventListener("popstate", () => {
+  state.activePolicyId = getSharedPolicyId();
+  state.detailMode = Boolean(state.activePolicyId);
+  renderPage();
+});
+
+renderPage();
