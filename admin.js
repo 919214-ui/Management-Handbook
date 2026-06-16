@@ -1,8 +1,8 @@
 const POLICY_STORAGE_KEY = "xinhua-education-policy-manual";
 const OPTIONS_STORAGE_KEY = "xinhua-education-policy-options";
 const LOGIN_KEY = "xinhua-education-admin-login";
-const ADMIN_ACCOUNT = "admin";
-const ADMIN_PASSWORD = "123456";
+const ACCOUNT_STORAGE_KEY = "xinhua-education-admin-account";
+let adminCredentials = loadAdminCredentials();
 
 const defaultPolicies = [
   {
@@ -46,6 +46,10 @@ const els = {
   newCategoryInput: document.querySelector("#newCategoryInput"),
   addCategoryButton: document.querySelector("#addCategoryButton"),
   categoryOptionList: document.querySelector("#categoryOptionList"),
+  accountForm: document.querySelector("#accountForm"),
+  adminAccountInput: document.querySelector("#adminAccountInput"),
+  adminPasswordInput: document.querySelector("#adminPasswordInput"),
+  adminPasswordConfirmInput: document.querySelector("#adminPasswordConfirmInput"),
   form: document.querySelector("#policyForm"),
   formHint: document.querySelector("#formHint"),
   policyId: document.querySelector("#policyId"),
@@ -80,6 +84,25 @@ function loadPolicies() {
   } catch {
     return defaultPolicies.map(normalizePolicy);
   }
+}
+
+function loadAdminCredentials() {
+  const fallback = {
+    account: window.XH_ADMIN_CONFIG?.account || "admin",
+    password: window.XH_ADMIN_CONFIG?.password || "123456"
+  };
+
+  try {
+    const saved = localStorage.getItem(ACCOUNT_STORAGE_KEY);
+    return saved ? { ...fallback, ...JSON.parse(saved) } : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveAdminCredentials(credentials) {
+  adminCredentials = credentials;
+  localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(credentials));
 }
 
 function loadOptions() {
@@ -214,6 +237,12 @@ function resetForm() {
   els.formHint.textContent = "填写后保存到制度库";
   state.imageDraft = null;
   renderMediaPreview();
+}
+
+function renderAccountForm() {
+  els.adminAccountInput.value = adminCredentials.account;
+  els.adminPasswordInput.value = "";
+  els.adminPasswordConfirmInput.value = "";
 }
 
 function renderSelectOptions() {
@@ -389,8 +418,8 @@ function getExecuteText(policy) {
 
 els.loginForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const accountOk = els.loginAccount.value.trim() === ADMIN_ACCOUNT;
-  const passwordOk = els.loginPassword.value === ADMIN_PASSWORD;
+  const accountOk = els.loginAccount.value.trim() === adminCredentials.account;
+  const passwordOk = els.loginPassword.value === adminCredentials.password;
   if (!accountOk || !passwordOk) {
     showToast("账号或密码不正确");
     return;
@@ -403,6 +432,36 @@ els.loginForm.addEventListener("submit", (event) => {
 els.logoutButton.addEventListener("click", () => {
   setLoggedIn(false);
   showToast("已退出登录");
+});
+
+els.accountForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const account = els.adminAccountInput.value.trim();
+  const password = els.adminPasswordInput.value;
+  const confirmPassword = els.adminPasswordConfirmInput.value;
+
+  if (!account) {
+    showToast("管理员账号不能为空");
+    return;
+  }
+
+  if (password || confirmPassword) {
+    if (password.length < 6) {
+      showToast("密码至少 6 位");
+      return;
+    }
+    if (password !== confirmPassword) {
+      showToast("两次输入的新密码不一致");
+      return;
+    }
+  }
+
+  saveAdminCredentials({
+    account,
+    password: password || adminCredentials.password
+  });
+  renderAccountForm();
+  showToast("账号密码已更新");
 });
 
 els.addDepartmentButton.addEventListener("click", () => {
@@ -530,5 +589,6 @@ els.exportButton.addEventListener("click", () => {
 resetForm();
 renderSelectOptions();
 renderOptionLists();
+renderAccountForm();
 setLoggedIn(localStorage.getItem(LOGIN_KEY) === "1");
 renderAdminList();

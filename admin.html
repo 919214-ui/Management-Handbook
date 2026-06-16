@@ -28,7 +28,6 @@
             <input id="loginPassword" type="password" autocomplete="current-password" placeholder="请输入密码" required />
           </label>
           <button class="primary-button" type="submit">登录后台</button>
-          <p class="login-tip">演示账号：admin　密码：123456</p>
         </form>
       </section>
 
@@ -177,11 +176,38 @@
               </div>
             </div>
           </section>
+
+          <section class="admin-panel">
+            <div class="section-heading">
+              <h2>账号密码管理</h2>
+              <p>修改后台登录信息</p>
+            </div>
+            <form class="policy-form" id="accountForm">
+              <label>
+                管理员账号
+                <input id="adminAccountInput" autocomplete="username" required />
+              </label>
+              <div class="form-row">
+                <label>
+                  新密码
+                  <input id="adminPasswordInput" type="password" autocomplete="new-password" placeholder="不修改可留空" />
+                </label>
+                <label>
+                  确认新密码
+                  <input id="adminPasswordConfirmInput" type="password" autocomplete="new-password" placeholder="再次输入新密码" />
+                </label>
+              </div>
+              <div class="form-actions">
+                <button class="primary-button" type="submit">保存账号密码</button>
+              </div>
+            </form>
+          </section>
         </div>
       </section>
     </main>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="config.js"></script>
     <script src="admin.js"></script>
   </body>
 </html>

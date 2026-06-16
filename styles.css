@@ -304,6 +304,14 @@ p {
   border-bottom: 1px solid var(--line);
 }
 
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .detail-header h2 {
   margin-top: 8px;
   font-size: 25px;
@@ -785,6 +793,10 @@ mark {
 
   .detail-header {
     flex-direction: column;
+  }
+
+  .detail-actions {
+    justify-content: flex-start;
   }
 
   .detail-grid {

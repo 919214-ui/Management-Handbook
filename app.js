@@ -27,7 +27,7 @@ const defaultPolicies = [
 const state = {
   policies: loadPolicies(),
   activeDepartment: ALL_DEPARTMENT,
-  activePolicyId: null
+  activePolicyId: getSharedPolicyId()
 };
 
 const els = {
@@ -46,6 +46,11 @@ function loadPolicies() {
   } catch {
     return defaultPolicies.map(normalizePolicy);
   }
+}
+
+function getSharedPolicyId() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("policy") || "";
 }
 
 function normalizePolicy(policy) {
@@ -201,7 +206,10 @@ function renderEmployeeDetail() {
         <span class="pill">${escapeHtml(policy.department)}</span>
         <h2>${highlight(policy.title, query)}</h2>
       </div>
-      <span class="pill status-pill">${escapeHtml(policy.status)}</span>
+      <div class="detail-actions">
+        <span class="pill status-pill">${escapeHtml(policy.status)}</span>
+        <button class="secondary-button" type="button" data-share-policy="${policy.id}">分享制度</button>
+      </div>
     </div>
     <div class="detail-grid">
       <div class="detail-stat"><span>所属部门</span><strong>${escapeHtml(policy.department)}</strong></div>
@@ -225,6 +233,23 @@ function renderEmployeeDetail() {
   `;
 }
 
+function getPolicyShareUrl(policyId) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("policy", policyId);
+  return url.toString();
+}
+
+async function sharePolicy(policy) {
+  const url = getPolicyShareUrl(policy.id);
+  const title = `新火教育制度手册 - ${policy.title}`;
+  if (navigator.share) {
+    await navigator.share({ title, text: policy.summary, url });
+    return;
+  }
+  await navigator.clipboard.writeText(url);
+  alert("制度链接已复制，可以直接发送给同事。");
+}
+
 function getExecuteText(policy) {
   if (policy.executeStart && policy.executeEnd) return `${policy.executeStart} 至 ${policy.executeEnd}`;
   if (policy.executeStart) return `${policy.executeStart} 起执行`;
@@ -246,7 +271,20 @@ els.employeePolicyList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-policy-id]");
   if (!button) return;
   state.activePolicyId = button.dataset.policyId;
+  window.history.replaceState(null, "", getPolicyShareUrl(state.activePolicyId));
   renderEmployeeList();
+});
+
+els.employeePolicyDetail.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-share-policy]");
+  if (!button) return;
+  const policy = state.policies.find((item) => item.id === button.dataset.sharePolicy);
+  if (!policy) return;
+  try {
+    await sharePolicy(policy);
+  } catch {
+    alert("分享失败，请稍后再试。");
+  }
 });
 
 renderDepartments();
