@@ -8,11 +8,13 @@ const PORT = Number(process.env.PORT || 3001);
 const ROOT = __dirname;
 const DATA_FILE = path.join(ROOT, "data.json");
 
-const WEWORK_CORP_ID = process.env.WEWORK_CORP_ID || "";
-const WEWORK_AGENT_ID = process.env.WEWORK_AGENT_ID || "";
-const WEWORK_SECRET = process.env.WEWORK_SECRET || "";
+const WECOM_CORP_ID = process.env.WECOM_CORP_ID || process.env.WEWORK_CORP_ID || "";
+const WECOM_AGENT_ID = process.env.WECOM_AGENT_ID || process.env.WEWORK_AGENT_ID || "";
+const WECOM_SECRET = process.env.WECOM_SECRET || process.env.WEWORK_SECRET || "";
+const WECOM_TOKEN = process.env.WECOM_TOKEN || "";
+const WECOM_ENCODING_AES_KEY = process.env.WECOM_ENCODING_AES_KEY || "";
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "https://zhidu.xh028.com").replace(/\/$/, "");
-const ENV_ADMIN_USERIDS = (process.env.WEWORK_ADMIN_USERIDS || "")
+const ENV_ADMIN_USERIDS = (process.env.WECOM_ADMIN_USERIDS || process.env.WEWORK_ADMIN_USERIDS || "")
   .split(",")
   .map((item) => item.trim())
   .filter(Boolean);
@@ -84,6 +86,14 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
+function sendText(res, status, text) {
+  res.writeHead(status, {
+    "Content-Type": "text/plain; charset=utf-8",
+    "Cache-Control": "no-store"
+  });
+  res.end(text);
+}
+
 function redirect(res, location) {
   res.writeHead(302, { Location: location });
   res.end();
@@ -122,8 +132,12 @@ function setSessionCookie(res, user) {
   res.setHeader("Set-Cookie", `zhidu_sid=${sid}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`);
 }
 
-function requireWeWorkConfig() {
-  return WEWORK_CORP_ID && WEWORK_AGENT_ID && WEWORK_SECRET;
+function requireWeComLoginConfig() {
+  return WECOM_CORP_ID && WECOM_AGENT_ID && WECOM_SECRET;
+}
+
+function requireWeComMessageConfig() {
+  return WECOM_TOKEN && WECOM_ENCODING_AES_KEY && WECOM_CORP_ID;
 }
 
 function httpsGetJson(url) {
@@ -146,7 +160,7 @@ function httpsGetJson(url) {
 
 async function getAccessToken() {
   if (tokenCache.token && tokenCache.expiresAt > Date.now() + 60 * 1000) return tokenCache.token;
-  const url = `https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=${encodeURIComponent(WEWORK_CORP_ID)}&corpsecret=${encodeURIComponent(WEWORK_SECRET)}`;
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=${encodeURIComponent(WECOM_CORP_ID)}&corpsecret=${encodeURIComponent(WECOM_SECRET)}`;
   const data = await httpsGetJson(url);
   if (data.errcode !== 0) throw new Error(data.errmsg || "企业微信 access_token 获取失败");
   tokenCache = {
@@ -162,7 +176,7 @@ async function getDepartmentMap(accessToken) {
   return Object.fromEntries(data.department.map((item) => [String(item.id), item.name]));
 }
 
-async function getWeWorkUser(code) {
+async function getWeComUser(code) {
   const accessToken = await getAccessToken();
   const userInfo = await httpsGetJson(`https://qyapi.weixin.qq.com/cgi-bin/auth/getuserinfo?access_token=${encodeURIComponent(accessToken)}&code=${encodeURIComponent(code)}`);
   if (userInfo.errcode !== 0 || !userInfo.UserId) throw new Error(userInfo.errmsg || "企业微信登录失败");
@@ -228,30 +242,31 @@ function filterDataForUser(data, user) {
   };
 }
 
-function readBody(req) {
+function readRawBody(req, limit = 25 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
     let body = "";
+    req.setEncoding("utf8");
     req.on("data", (chunk) => {
       body += chunk;
-      if (body.length > 25 * 1024 * 1024) {
+      if (body.length > limit) {
         reject(new Error("Request body too large"));
         req.destroy();
       }
     });
-    req.on("end", () => {
-      try {
-        resolve(body ? JSON.parse(body) : null);
-      } catch (error) {
-        reject(error);
-      }
-    });
+    req.on("end", () => resolve(body));
+    req.on("error", reject);
   });
 }
 
+async function readJsonBody(req) {
+  const body = await readRawBody(req);
+  return body ? JSON.parse(body) : null;
+}
+
 function makeLoginUrl(next = "/") {
-  const redirectUri = `${PUBLIC_BASE_URL}/api/wecom/callback`;
+  const redirectUri = `${PUBLIC_BASE_URL}/api/wecom/oauth/callback`;
   const state = Buffer.from(JSON.stringify({ next })).toString("base64url");
-  return `https://open.weixin.qq.com/connect/oauth2/authorize?appid=${encodeURIComponent(WEWORK_CORP_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=snsapi_base&agentid=${encodeURIComponent(WEWORK_AGENT_ID)}&state=${encodeURIComponent(state)}#wechat_redirect`;
+  return `https://open.weixin.qq.com/connect/oauth2/authorize?appid=${encodeURIComponent(WECOM_CORP_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=snsapi_base&agentid=${encodeURIComponent(WECOM_AGENT_ID)}&state=${encodeURIComponent(state)}#wechat_redirect`;
 }
 
 function decodeState(state) {
@@ -262,19 +277,98 @@ function decodeState(state) {
   }
 }
 
+function sha1(items) {
+  return crypto.createHash("sha1").update(items.sort().join("")).digest("hex");
+}
+
+function verifyWeComSignature(signature, timestamp, nonce, encrypted) {
+  if (!requireWeComMessageConfig()) throw new Error("企业微信消息回调配置缺失");
+  const expected = sha1([WECOM_TOKEN, timestamp || "", nonce || "", encrypted || ""]);
+  return expected === signature;
+}
+
+function getAesKey() {
+  if (WECOM_ENCODING_AES_KEY.length !== 43) {
+    throw new Error("WECOM_ENCODING_AES_KEY 长度必须为 43 位");
+  }
+  return Buffer.from(`${WECOM_ENCODING_AES_KEY}=`, "base64");
+}
+
+function pkcs7Unpad(buffer) {
+  const pad = buffer[buffer.length - 1];
+  if (pad < 1 || pad > 32) return buffer;
+  return buffer.subarray(0, buffer.length - pad);
+}
+
+function decryptWeComMessage(encrypted) {
+  const key = getAesKey();
+  const decipher = crypto.createDecipheriv("aes-256-cbc", key, key.subarray(0, 16));
+  decipher.setAutoPadding(false);
+  const decrypted = pkcs7Unpad(Buffer.concat([
+    decipher.update(encrypted, "base64"),
+    decipher.final()
+  ]));
+  const msgLength = decrypted.readUInt32BE(16);
+  const message = decrypted.subarray(20, 20 + msgLength).toString("utf8");
+  const receiveId = decrypted.subarray(20 + msgLength).toString("utf8");
+  if (receiveId && receiveId !== WECOM_CORP_ID) {
+    throw new Error("企业微信回调 CorpID 校验失败");
+  }
+  return message;
+}
+
+function extractXmlValue(xml, tag) {
+  const match = String(xml).match(new RegExp(`<${tag}>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?</${tag}>`));
+  return match ? match[1].trim() : "";
+}
+
+async function handleWeComMessageCallback(req, res, url) {
+  const signature = url.searchParams.get("msg_signature") || "";
+  const timestamp = url.searchParams.get("timestamp") || "";
+  const nonce = url.searchParams.get("nonce") || "";
+
+  if (req.method === "GET") {
+    const echostr = url.searchParams.get("echostr") || "";
+    if (!verifyWeComSignature(signature, timestamp, nonce, echostr)) {
+      sendText(res, 403, "invalid signature");
+      return true;
+    }
+    sendText(res, 200, decryptWeComMessage(echostr));
+    return true;
+  }
+
+  if (req.method === "POST") {
+    const xml = await readRawBody(req, 2 * 1024 * 1024);
+    const encrypted = extractXmlValue(xml, "Encrypt");
+    if (!encrypted) {
+      sendText(res, 400, "missing Encrypt");
+      return true;
+    }
+    if (!verifyWeComSignature(signature, timestamp, nonce, encrypted)) {
+      sendText(res, 403, "invalid signature");
+      return true;
+    }
+    decryptWeComMessage(encrypted);
+    sendText(res, 200, "success");
+    return true;
+  }
+
+  return false;
+}
+
 async function handleAuth(req, res, pathname, url) {
   if (pathname === "/api/wecom/login") {
-    if (!requireWeWorkConfig()) {
-      sendJson(res, 500, { error: "企业微信配置缺失，请设置 WEWORK_CORP_ID / WEWORK_AGENT_ID / WEWORK_SECRET" });
+    if (!requireWeComLoginConfig()) {
+      sendJson(res, 500, { error: "企业微信登录配置缺失，请设置 WECOM_CORP_ID / WECOM_AGENT_ID / WECOM_SECRET" });
       return true;
     }
     redirect(res, makeLoginUrl(url.searchParams.get("next") || "/"));
     return true;
   }
 
-  if (pathname === "/api/wecom/callback") {
+  if (pathname === "/api/wecom/oauth/callback") {
     try {
-      const user = await getWeWorkUser(url.searchParams.get("code") || "");
+      const user = await getWeComUser(url.searchParams.get("code") || "");
       bootstrapAdminIfNeeded(user);
       saveUser(user);
       setSessionCookie(res, user);
@@ -282,6 +376,11 @@ async function handleAuth(req, res, pathname, url) {
     } catch (error) {
       sendJson(res, 401, { error: error.message || "企业微信登录失败" });
     }
+    return true;
+  }
+
+  if (pathname === "/api/wecom/callback") {
+    sendJson(res, 400, { error: "登录回调已迁移到 /api/wecom/oauth/callback；消息回调请使用 /api/wecom/message/callback" });
     return true;
   }
 
@@ -324,7 +423,7 @@ async function handleApi(req, res, pathname) {
     return true;
   }
 
-  const payload = await readBody(req);
+  const payload = await readJsonBody(req);
 
   if (pathname === "/api/policies") {
     data.policies = Array.isArray(payload) ? payload : [];
@@ -357,8 +456,7 @@ function serveStatic(req, res, pathname) {
     return;
   }
   if (pathname === "/admin.html" && !isAdmin(session?.user)) {
-    res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("没有后台权限");
+    sendText(res, 403, "没有后台权限");
     return;
   }
 
@@ -389,6 +487,7 @@ function serveStatic(req, res, pathname) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
+    if (url.pathname === "/api/wecom/message/callback" && await handleWeComMessageCallback(req, res, url)) return;
     if (await handleAuth(req, res, url.pathname, url)) return;
     if (url.pathname.startsWith("/api/") && await handleApi(req, res, url.pathname)) return;
     serveStatic(req, res, url.pathname);
