@@ -94,6 +94,23 @@ function sendText(res, status, text) {
   res.end(text);
 }
 
+function sendHtml(res, status, html) {
+  res.writeHead(status, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store"
+  });
+  res.end(html);
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function redirect(res, location) {
   res.writeHead(302, { Location: location });
   res.end();
@@ -190,14 +207,31 @@ async function getDepartmentMap(accessToken) {
 async function getWeComUser(code) {
   const accessToken = await getAccessToken();
   const userInfo = await httpsGetJson(`https://qyapi.weixin.qq.com/cgi-bin/auth/getuserinfo?access_token=${encodeURIComponent(accessToken)}&code=${encodeURIComponent(code)}`);
-  if (userInfo.errcode !== 0 || !userInfo.UserId) throw new Error(userInfo.errmsg || "企业微信登录失败");
+  console.log("[wecom-oauth] getuserinfo response", {
+    errcode: userInfo.errcode,
+    errmsg: userInfo.errmsg,
+    hasUserId: Boolean(userInfo.UserId || userInfo.userid),
+    hasOpenId: Boolean(userInfo.OpenId || userInfo.openid)
+  });
+  if (userInfo.errcode !== 0) throw new Error(userInfo.errmsg || "企业微信登录失败");
 
-  const detail = await httpsGetJson(`https://qyapi.weixin.qq.com/cgi-bin/user/get?access_token=${encodeURIComponent(accessToken)}&userid=${encodeURIComponent(userInfo.UserId)}`);
+  const userId = userInfo.UserId || userInfo.userid;
+  if (!userId) {
+    throw new Error("企业微信登录成功，但没有返回成员 UserId，请确认从企业微信内部应用打开，并且应用可见范围包含当前成员");
+  }
+
+  const detail = await httpsGetJson(`https://qyapi.weixin.qq.com/cgi-bin/user/get?access_token=${encodeURIComponent(accessToken)}&userid=${encodeURIComponent(userId)}`);
+  if (detail.errcode && detail.errcode !== 0) {
+    console.log("[wecom-oauth] user detail fetch failed", {
+      errcode: detail.errcode,
+      errmsg: detail.errmsg
+    });
+  }
   const departmentMap = await getDepartmentMap(accessToken);
   const departmentIds = Array.isArray(detail.department) ? detail.department.map(String) : [];
   return {
-    userid: userInfo.UserId,
-    name: detail.name || userInfo.UserId,
+    userid: userId,
+    name: detail.name || userId,
     avatar: detail.avatar || "",
     mobile: detail.mobile || "",
     departmentIds,
@@ -482,13 +516,42 @@ async function handleAuth(req, res, pathname, url) {
 
   if (pathname === "/api/wecom/oauth/callback") {
     try {
-      const user = await getWeComUser(url.searchParams.get("code") || "");
+      const code = url.searchParams.get("code") || "";
+      if (!code) {
+        sendHtml(res, 400, "<!doctype html><meta charset=\"utf-8\"><title>登录失败</title><p>企业微信登录失败：缺少授权 code。</p>");
+        return true;
+      }
+      const user = await getWeComUser(code);
       bootstrapAdminIfNeeded(user);
       saveUser(user);
       setSessionCookie(res, user);
-      redirect(res, decodeState(url.searchParams.get("state")).next || "/");
+      console.log("[wecom-oauth] login success", {
+        userid: user.userid,
+        redirectTo: "/"
+      });
+      redirect(res, "/");
     } catch (error) {
-      sendJson(res, 401, { error: error.message || "企业微信登录失败" });
+      console.log("[wecom-oauth] login failed", { error: error.message });
+      sendHtml(res, 401, `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>企业微信登录失败</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #fff7ed; color: #2f241f; }
+    main { max-width: 520px; padding: 28px; line-height: 1.7; }
+    h1 { margin: 0 0 12px; font-size: 22px; }
+    p { margin: 0; color: #7c5b49; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>企业微信登录失败</h1>
+    <p>${escapeHtml(error.message || "请稍后重试，或联系管理员检查企业微信应用配置。")}</p>
+  </main>
+</body>
+</html>`);
     }
     return true;
   }
