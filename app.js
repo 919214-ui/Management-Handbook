@@ -44,6 +44,11 @@ function loadServerDataSync() {
     const request = new XMLHttpRequest();
     request.open("GET", `/api/data?t=${Date.now()}`, false);
     request.send();
+    if (request.status === 401) {
+      const data = JSON.parse(request.responseText || "{}");
+      if (data.loginUrl) window.location.href = data.loginUrl;
+      return null;
+    }
     return request.status === 200 ? JSON.parse(request.responseText) : null;
   } catch {
     return null;

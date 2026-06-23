@@ -61,6 +61,9 @@ const els = {
   policyUpdated: document.querySelector("#policyUpdated"),
   policyExecuteStart: document.querySelector("#policyExecuteStart"),
   policyExecuteEnd: document.querySelector("#policyExecuteEnd"),
+  policyVisibilityScope: document.querySelector("#policyVisibilityScope"),
+  policyVisibilityDepartments: document.querySelector("#policyVisibilityDepartments"),
+  policyVisibilityUsers: document.querySelector("#policyVisibilityUsers"),
   policySummary: document.querySelector("#policySummary"),
   policyContent: document.querySelector("#policyContent"),
   policyImage: document.querySelector("#policyImage"),
@@ -94,6 +97,11 @@ function loadServerDataSync() {
     const request = new XMLHttpRequest();
     request.open("GET", `/api/data?t=${Date.now()}`, false);
     request.send();
+    if (request.status === 401) {
+      const data = JSON.parse(request.responseText || "{}");
+      if (data.loginUrl) window.location.href = data.loginUrl;
+      return null;
+    }
     return request.status === 200 ? JSON.parse(request.responseText) : null;
   } catch {
     return null;
@@ -177,6 +185,22 @@ function splitKeywords(value) {
     .filter(Boolean);
 }
 
+function splitLines(value) {
+  return String(value)
+    .split(/\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeVisibility(visibility) {
+  const scope = ["all", "departments", "users"].includes(visibility?.scope) ? visibility.scope : "all";
+  return {
+    scope,
+    departments: Array.isArray(visibility?.departments) ? visibility.departments.map(String).filter(Boolean) : [],
+    users: Array.isArray(visibility?.users) ? visibility.users.map(String).filter(Boolean) : []
+  };
+}
+
 function normalizeOptions(values, fallback) {
   const source = Array.isArray(values) && values.length ? values : fallback;
   return [...new Set(source.map((item) => String(item).trim()).filter(Boolean))];
@@ -206,6 +230,7 @@ function normalizePolicy(policy) {
     keywords: keywords.map((item) => String(item).trim()).filter(Boolean),
     summary: String(policy.summary || "").trim(),
     content: String(policy.content || policy.body || "").trim(),
+    visibility: normalizeVisibility(policy.visibility),
     imageData: policy.imageData || "",
     imageName: policy.imageName || "",
     documentData: policy.documentData || "",
@@ -265,12 +290,16 @@ function resetForm() {
   els.policyUpdated.value = today();
   els.policyExecuteStart.value = "";
   els.policyExecuteEnd.value = "";
+  els.policyVisibilityScope.value = "all";
+  els.policyVisibilityDepartments.value = "";
+  els.policyVisibilityUsers.value = "";
   els.formHint.textContent = "填写后保存到制度库";
   state.imageDraft = null;
   renderMediaPreview();
 }
 
 function renderAccountForm() {
+  if (!els.accountForm) return;
   els.adminAccountInput.value = adminCredentials.account;
   els.adminPasswordInput.value = "";
   els.adminPasswordConfirmInput.value = "";
@@ -370,6 +399,9 @@ function fillForm(policy) {
   els.policyUpdated.value = policy.updated;
   els.policyExecuteStart.value = policy.executeStart;
   els.policyExecuteEnd.value = policy.executeEnd;
+  els.policyVisibilityScope.value = policy.visibility.scope;
+  els.policyVisibilityDepartments.value = policy.visibility.departments.join("\n");
+  els.policyVisibilityUsers.value = policy.visibility.users.join("\n");
   els.policySummary.value = policy.summary;
   els.policyContent.value = policy.content;
   els.formHint.textContent = `正在编辑：${policy.title}`;
@@ -407,6 +439,7 @@ function renderAdminList() {
           <span>${escapeHtml(policy.updated)}</span>
           <span>${escapeHtml(getExecuteText(policy))}</span>
           <span>${escapeHtml(policy.status)}</span>
+          <span>${escapeHtml(getVisibilityText(policy))}</span>
           <span>${policy.imageData ? "已上传图片" : "无图片"}</span>
         </div>
         <div class="item-actions">
@@ -416,6 +449,13 @@ function renderAdminList() {
       </article>
     `)
     .join("");
+}
+
+function getVisibilityText(policy) {
+  const visibility = normalizeVisibility(policy.visibility);
+  if (visibility.scope === "departments") return `指定部门：${visibility.departments.join("、") || "未设置"}`;
+  if (visibility.scope === "users") return `指定成员：${visibility.users.join("、") || "未设置"}`;
+  return "全公司可见";
 }
 
 function getFilteredAdminPolicies() {
@@ -465,7 +505,7 @@ els.logoutButton.addEventListener("click", () => {
   showToast("已退出登录");
 });
 
-els.accountForm.addEventListener("submit", (event) => {
+if (els.accountForm) els.accountForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const account = els.adminAccountInput.value.trim();
   const password = els.adminPasswordInput.value;
@@ -550,6 +590,11 @@ els.form.addEventListener("submit", (event) => {
     updated: els.policyUpdated.value,
     executeStart: els.policyExecuteStart.value,
     executeEnd: els.policyExecuteEnd.value,
+    visibility: {
+      scope: els.policyVisibilityScope.value,
+      departments: splitLines(els.policyVisibilityDepartments.value),
+      users: splitLines(els.policyVisibilityUsers.value)
+    },
     keywords: buildKeywords({
       title: els.policyTitle.value,
       department: els.policyDepartment.value,
@@ -621,7 +666,7 @@ resetForm();
 renderSelectOptions();
 renderOptionLists();
 renderAccountForm();
-setLoggedIn(localStorage.getItem(LOGIN_KEY) === "1");
+setLoggedIn(Boolean(serverData?.isAdmin) || localStorage.getItem(LOGIN_KEY) === "1");
 if (serverData && !serverData.policies?.length && localStorage.getItem(POLICY_STORAGE_KEY) && state.policies.length) {
   savePolicies();
 }

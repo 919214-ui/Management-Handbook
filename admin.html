@@ -108,6 +108,24 @@
                 </label>
               </div>
               <label>
+                可见范围
+                <select id="policyVisibilityScope">
+                  <option value="all">全公司可见</option>
+                  <option value="departments">指定部门可见</option>
+                  <option value="users">指定成员可见</option>
+                </select>
+              </label>
+              <div class="form-row">
+                <label>
+                  指定部门
+                  <textarea id="policyVisibilityDepartments" rows="3" placeholder="每行一个部门名称，或企业微信部门ID"></textarea>
+                </label>
+                <label>
+                  指定成员 UserId
+                  <textarea id="policyVisibilityUsers" rows="3" placeholder="每行一个企业微信 UserId"></textarea>
+                </label>
+              </div>
+              <label>
                 制度摘要
                 <textarea id="policySummary" required rows="3" placeholder="简要说明这条制度解决什么问题"></textarea>
               </label>
