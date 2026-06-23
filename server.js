@@ -372,18 +372,16 @@ async function handleWeComMessageCallback(req, res, url) {
 
     try {
       const decrypted = decryptWeComMessage(echostr);
-      const toUserName = extractXmlValue(decrypted.message, "ToUserName");
-      const corpIdMatched = toUserName
-        ? toUserName === WECOM_CORP_ID
-        : decrypted.receiveId === WECOM_CORP_ID;
+      const hasReceiveId = Boolean(decrypted.receiveId);
+      const corpIdMatched = hasReceiveId ? decrypted.receiveId === WECOM_CORP_ID : true;
       logWeComCallback("GET decrypt success", {
         decrypted: true,
-        hasToUserName: Boolean(toUserName),
-        hasReceiveId: Boolean(decrypted.receiveId),
-        corpIdMatched
+        hasReceiveId,
+        corpIdMatched,
+        plainTextLength: decrypted.message.length
       });
 
-      if (!corpIdMatched) {
+      if (hasReceiveId && !corpIdMatched) {
         sendText(res, 403, "corpId mismatch");
         return true;
       }
