@@ -386,12 +386,21 @@ async function handleWeComMessageCallback(req, res, url) {
         return true;
       }
 
-      sendText(res, 200, decrypted.message);
+      logWeComCallback("GET verify response sent", {
+        status: 200,
+        plainTextLength: decrypted.message.length
+      });
+      res.writeHead(200, {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store"
+      });
+      res.end(decrypted.message);
+      return true;
     } catch (error) {
       logWeComCallback("GET decrypt failed", { decrypted: false, error: error.message });
       sendText(res, 400, "decrypt failed");
+      return true;
     }
-    return true;
   }
 
   if (req.method === "POST") {
