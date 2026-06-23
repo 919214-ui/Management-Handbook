@@ -8,9 +8,9 @@ const PORT = Number(process.env.PORT || 3001);
 const ROOT = __dirname;
 const DATA_FILE = path.join(ROOT, "data.json");
 
-const WECOM_CORP_ID = (process.env.WECOM_CORP_ID || process.env.WEWORK_CORP_ID || "").trim();
-const WECOM_AGENT_ID = (process.env.WECOM_AGENT_ID || process.env.WEWORK_AGENT_ID || "").trim();
-const WECOM_SECRET = (process.env.WECOM_SECRET || process.env.WEWORK_SECRET || "").trim();
+const WECOM_CORP_ID = (process.env.WECOM_CORP_ID || "").trim();
+const WECOM_AGENT_ID = (process.env.WECOM_AGENT_ID || "").trim();
+const WECOM_CORP_SECRET = (process.env.WECOM_CORP_SECRET || "").trim();
 const WECOM_TOKEN = (process.env.WECOM_TOKEN || "").trim();
 const WECOM_ENCODING_AES_KEY = (process.env.WECOM_ENCODING_AES_KEY || "").trim();
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "https://zhidu.xh028.com").replace(/\/$/, "");
@@ -133,7 +133,15 @@ function setSessionCookie(res, user) {
 }
 
 function requireWeComLoginConfig() {
-  return WECOM_CORP_ID && WECOM_AGENT_ID && WECOM_SECRET;
+  const missing = [];
+  if (!WECOM_CORP_ID) missing.push("WECOM_CORP_ID");
+  if (!WECOM_AGENT_ID) missing.push("WECOM_AGENT_ID");
+  if (!WECOM_CORP_SECRET) missing.push("WECOM_CORP_SECRET");
+  if (missing.length) {
+    console.log("[wecom-oauth] login config missing", { missing });
+    return false;
+  }
+  return true;
 }
 
 function requireWeComMessageConfig() {
@@ -160,7 +168,10 @@ function httpsGetJson(url) {
 
 async function getAccessToken() {
   if (tokenCache.token && tokenCache.expiresAt > Date.now() + 60 * 1000) return tokenCache.token;
-  const url = `https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=${encodeURIComponent(WECOM_CORP_ID)}&corpsecret=${encodeURIComponent(WECOM_SECRET)}`;
+  if (!requireWeComLoginConfig()) {
+    throw new Error("企业微信登录配置缺失");
+  }
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=${encodeURIComponent(WECOM_CORP_ID)}&corpsecret=${encodeURIComponent(WECOM_CORP_SECRET)}`;
   const data = await httpsGetJson(url);
   if (data.errcode !== 0) throw new Error(data.errmsg || "企业微信 access_token 获取失败");
   tokenCache = {
@@ -462,7 +473,7 @@ async function handleWeComMessageCallback(req, res, url) {
 async function handleAuth(req, res, pathname, url) {
   if (pathname === "/api/wecom/login") {
     if (!requireWeComLoginConfig()) {
-      sendJson(res, 500, { error: "企业微信登录配置缺失，请设置 WECOM_CORP_ID / WECOM_AGENT_ID / WECOM_SECRET" });
+      sendJson(res, 500, { error: "企业微信登录配置缺失，请设置 WECOM_CORP_ID / WECOM_AGENT_ID / WECOM_CORP_SECRET" });
       return true;
     }
     redirect(res, makeLoginUrl(url.searchParams.get("next") || "/"));
