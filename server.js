@@ -8,11 +8,11 @@ const PORT = Number(process.env.PORT || 3001);
 const ROOT = __dirname;
 const DATA_FILE = path.join(ROOT, "data.json");
 
-const WECOM_CORP_ID = process.env.WECOM_CORP_ID || process.env.WEWORK_CORP_ID || "";
-const WECOM_AGENT_ID = process.env.WECOM_AGENT_ID || process.env.WEWORK_AGENT_ID || "";
-const WECOM_SECRET = process.env.WECOM_SECRET || process.env.WEWORK_SECRET || "";
-const WECOM_TOKEN = process.env.WECOM_TOKEN || "";
-const WECOM_ENCODING_AES_KEY = process.env.WECOM_ENCODING_AES_KEY || "";
+const WECOM_CORP_ID = (process.env.WECOM_CORP_ID || process.env.WEWORK_CORP_ID || "").trim();
+const WECOM_AGENT_ID = (process.env.WECOM_AGENT_ID || process.env.WEWORK_AGENT_ID || "").trim();
+const WECOM_SECRET = (process.env.WECOM_SECRET || process.env.WEWORK_SECRET || "").trim();
+const WECOM_TOKEN = (process.env.WECOM_TOKEN || "").trim();
+const WECOM_ENCODING_AES_KEY = (process.env.WECOM_ENCODING_AES_KEY || "").trim();
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "https://zhidu.xh028.com").replace(/\/$/, "");
 const ENV_ADMIN_USERIDS = (process.env.WECOM_ADMIN_USERIDS || process.env.WEWORK_ADMIN_USERIDS || "")
   .split(",")
@@ -278,20 +278,26 @@ function decodeState(state) {
 }
 
 function sha1(items) {
-  return crypto.createHash("sha1").update(items.sort().join("")).digest("hex");
+  return crypto.createHash("sha1").update(items.map(String).sort().join("")).digest("hex");
 }
 
-function verifyWeComSignature(signature, timestamp, nonce, encrypted) {
-  if (!requireWeComMessageConfig()) throw new Error("企业微信消息回调配置缺失");
-  const expected = sha1([WECOM_TOKEN, timestamp || "", nonce || "", encrypted || ""]);
-  return expected === signature;
+function createWeComSignature(timestamp, nonce, encrypted) {
+  return sha1([WECOM_TOKEN || "", timestamp || "", nonce || "", encrypted || ""]);
+}
+
+function logWeComCallback(message, extra = {}) {
+  console.log("[wecom-message-callback]", message, extra);
 }
 
 function getAesKey() {
   if (WECOM_ENCODING_AES_KEY.length !== 43) {
     throw new Error("WECOM_ENCODING_AES_KEY 长度必须为 43 位");
   }
-  return Buffer.from(`${WECOM_ENCODING_AES_KEY}=`, "base64");
+  const key = Buffer.from(`${WECOM_ENCODING_AES_KEY}=`, "base64");
+  if (key.length !== 32) {
+    throw new Error("invalid aes key");
+  }
+  return key;
 }
 
 function pkcs7Unpad(buffer) {
@@ -314,7 +320,7 @@ function decryptWeComMessage(encrypted) {
   if (receiveId && receiveId !== WECOM_CORP_ID) {
     throw new Error("企业微信回调 CorpID 校验失败");
   }
-  return message;
+  return { message, receiveId };
 }
 
 function extractXmlValue(xml, tag) {
@@ -329,26 +335,116 @@ async function handleWeComMessageCallback(req, res, url) {
 
   if (req.method === "GET") {
     const echostr = url.searchParams.get("echostr") || "";
-    if (!verifyWeComSignature(signature, timestamp, nonce, echostr)) {
+    const expectedSignature = createWeComSignature(timestamp, nonce, echostr);
+    logWeComCallback("GET verify start", {
+      hasMsgSignature: Boolean(signature),
+      hasTimestamp: Boolean(timestamp),
+      hasNonce: Boolean(nonce),
+      hasEchostr: Boolean(echostr),
+      tokenLength: WECOM_TOKEN.length,
+      aesKeyLength: WECOM_ENCODING_AES_KEY.length,
+      hasCorpId: Boolean(WECOM_CORP_ID),
+      expectedSignature,
+      receivedSignature: signature
+    });
+
+    if (!requireWeComMessageConfig()) {
+      logWeComCallback("GET config missing", {
+        tokenLength: WECOM_TOKEN.length,
+        aesKeyLength: WECOM_ENCODING_AES_KEY.length,
+        hasCorpId: Boolean(WECOM_CORP_ID)
+      });
+      sendText(res, 500, "wecom message config missing");
+      return true;
+    }
+
+    if (!signature || !timestamp || !nonce || !echostr) {
+      logWeComCallback("GET query missing");
+      sendText(res, 400, "missing query");
+      return true;
+    }
+
+    if (expectedSignature !== signature) {
+      logWeComCallback("GET signature mismatch", { expectedSignature, receivedSignature: signature });
       sendText(res, 403, "invalid signature");
       return true;
     }
-    sendText(res, 200, decryptWeComMessage(echostr));
+
+    try {
+      const decrypted = decryptWeComMessage(echostr);
+      const toUserName = extractXmlValue(decrypted.message, "ToUserName");
+      const corpIdMatched = toUserName
+        ? toUserName === WECOM_CORP_ID
+        : decrypted.receiveId === WECOM_CORP_ID;
+      logWeComCallback("GET decrypt success", {
+        decrypted: true,
+        hasToUserName: Boolean(toUserName),
+        hasReceiveId: Boolean(decrypted.receiveId),
+        corpIdMatched
+      });
+
+      if (!corpIdMatched) {
+        sendText(res, 403, "corpId mismatch");
+        return true;
+      }
+
+      sendText(res, 200, decrypted.message);
+    } catch (error) {
+      logWeComCallback("GET decrypt failed", { decrypted: false, error: error.message });
+      sendText(res, 400, "decrypt failed");
+    }
     return true;
   }
 
   if (req.method === "POST") {
     const xml = await readRawBody(req, 2 * 1024 * 1024);
     const encrypted = extractXmlValue(xml, "Encrypt");
+    const expectedSignature = createWeComSignature(timestamp, nonce, encrypted);
+    logWeComCallback("POST receive", {
+      hasMsgSignature: Boolean(signature),
+      hasTimestamp: Boolean(timestamp),
+      hasNonce: Boolean(nonce),
+      hasEncrypt: Boolean(encrypted),
+      tokenLength: WECOM_TOKEN.length,
+      aesKeyLength: WECOM_ENCODING_AES_KEY.length,
+      hasCorpId: Boolean(WECOM_CORP_ID),
+      expectedSignature,
+      receivedSignature: signature
+    });
     if (!encrypted) {
       sendText(res, 400, "missing Encrypt");
       return true;
     }
-    if (!verifyWeComSignature(signature, timestamp, nonce, encrypted)) {
+    if (!requireWeComMessageConfig()) {
+      sendText(res, 500, "wecom message config missing");
+      return true;
+    }
+    if (expectedSignature !== signature) {
+      logWeComCallback("POST signature mismatch", { expectedSignature, receivedSignature: signature });
       sendText(res, 403, "invalid signature");
       return true;
     }
-    decryptWeComMessage(encrypted);
+    try {
+      const decrypted = decryptWeComMessage(encrypted);
+      const toUserName = extractXmlValue(decrypted.message, "ToUserName");
+      const corpIdMatched = toUserName
+        ? toUserName === WECOM_CORP_ID
+        : decrypted.receiveId === WECOM_CORP_ID;
+      logWeComCallback("POST decrypt success", {
+        decrypted: true,
+        hasToUserName: Boolean(toUserName),
+        hasReceiveId: Boolean(decrypted.receiveId),
+        corpIdMatched
+      });
+      if (!corpIdMatched) {
+        sendText(res, 403, "corpId mismatch");
+        return true;
+      }
+    } catch (error) {
+      logWeComCallback("POST decrypt failed", { decrypted: false, error: error.message });
+      sendText(res, 400, "decrypt failed");
+      return true;
+    }
     sendText(res, 200, "success");
     return true;
   }
